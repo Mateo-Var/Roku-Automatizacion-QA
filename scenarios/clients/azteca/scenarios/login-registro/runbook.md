@@ -103,7 +103,7 @@ en la misma pantalla, editando campos en vez de volver atrás:
    - Editar de nuevo, reenviar → confirmar rechazo (intento 3/3) → si NINGUNO de los 3 tuvo fricción extra (delay/bloqueo/captcha) → confirma **AC-SEC-01B** (ya se sabe el resultado, solo reconfirmar rápido, sin 📸 salvo algo cambie)
 3. Volver al email (via "VOLVER AL INICIO" si hace falta, es la única
    transición de pantalla completa que se repite en esta fase), tipear el
-   **email válido** (`jmatevargas@poligran.edu.co`), avanzar a password:
+   **email válido** (`qa.tester@example.com`), avanzar a password:
    - Password vacía → enviar → confirmar rechazo → **AC-SEC-02 (vacía)**
    - 1 caracter → enviar → confirmar rechazo → **AC-SEC-02 (1 char)**
    - String de inyección (ej. `abc'or1=1--`) → enviar → va a loguear por
@@ -118,7 +118,7 @@ en la misma pantalla, editando campos en vez de volver atrás:
    - Email en MAYÚSCULAS + password correcta → confirmar si rechaza o
      loguea → **AC-SEC-06 (case)**
    - Email con espacio final + password correcta → confirmar → **AC-SEC-06 (espacio)**
-   - Finalmente: email válido + password REAL correcta (`Winner2025`) →
+   - Finalmente: email válido + password REAL correcta (`Ex4mpleP4ss!`) →
      login exitoso real → **AC-UL-01 parte 2** (confirmar identidad
      visible) → 📸 captura de "Mi cuenta" con el nombre real (cierre de
      AC-UL-01)
@@ -129,7 +129,7 @@ Con sesión ya cerrada (logout desde AccountPage, rápido):
 
 1. "Regístrate" → email nuevo de prueba + password de prueba → confirmar
    pantalla de verificación por email (no bypass) → **AC-REG-01 caso 1**
-2. Editar el email al ya existente (`jmatevargas@poligran.edu.co`) →
+2. Editar el email al ya existente (`qa.tester@example.com`) →
    confirmar rechazo por duplicado → **AC-REG-01 caso 2**
 3. Password débil (`abc`) → confirmar rechazo client-side → **AC-REG-01 caso 3**
    📸 una sola captura del mensaje de error final acá alcanza.

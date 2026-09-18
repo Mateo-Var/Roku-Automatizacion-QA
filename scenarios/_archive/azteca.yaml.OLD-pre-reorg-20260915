@@ -273,7 +273,7 @@
   steps:
     - Ir a LoginRegPage (deslogueado)
     - "Caso A -- email incorrecto: ingresar un email que NO existe como cuenta (ej. variante inventada), contraseña cualquiera, confirmar"
-    - "Caso B -- password incorrecta: ingresar el email VÁLIDO (jmatevargas@poligran.edu.co) con una contraseña deliberadamente incorrecta, confirmar"
+    - "Caso B -- password incorrecta: ingresar el email VÁLIDO (qa.tester@example.com) con una contraseña deliberadamente incorrecta, confirmar"
     - "Caso C -- formato inválido: email sin @, o campo vacío, confirmar"
   expected:
     - Solo cuentas autorizadas pueden loguear -- en NINGÚN caso (A, B o C) debe terminar logueado
@@ -347,7 +347,7 @@
     - Seleccionar "Regístrate" / "Registrarme con email"
     - Completar el flujo con un email de prueba NUEVO (no uno ya registrado) y una contraseña de prueba, usando el teclado en pantalla
     - Confirmar el registro
-    - "Caso de error: intentar registrar con el email YA existente (jmatevargas@poligran.edu.co) y confirmar que muestra error de cuenta duplicada, no crash"
+    - "Caso de error: intentar registrar con el email YA existente (qa.tester@example.com) y confirmar que muestra error de cuenta duplicada, no crash"
     - "Caso de error: intentar registrar con formato inválido (email sin @, contraseña muy corta si aplica) y confirmar mensaje de error"
   expected:
     - El flujo de registro completa o pide verificación adicional (ej. email de confirmación) de forma clara, sin crash
@@ -420,7 +420,7 @@
     - 'CRÍTICO: si un código inventado resuelve login_success, es el mismo tipo de bug que AC-UL-02 pero en el flujo OTP'
   manual_verification_required: >
     PENDIENTE DE CONFIRMACIÓN HUMANA: el agente no tiene acceso a la bandeja
-    de email jmatevargas@poligran.edu.co. Dejar documentado en el reporte
+    de email qa.tester@example.com. Dejar documentado en el reporte
     que hace falta que el usuario confirme manualmente: (a) si efectivamente
     llegó un correo con un código real, (b) si ese código real sí loguea
     correctamente al probarlo. El agente solo puede confirmar la mitad
@@ -434,7 +434,7 @@
     línea roja adicional ("No encontramos una cuenta asociada a este
     email. Verifica que esté bien...") SOLO para el email inexistente,
     mensaje limpio (sin línea roja) para el email válido
-    (jmatevargas@poligran.edu.co) -- mismo patrón exacto que las corridas
+    (qa.tester@example.com) -- mismo patrón exacto que las corridas
     2 y 3 (tiebreak). Conteo final: 3 de 5 corridas ven la fuga (corridas
     2, 3-tiebreak, 5-final20min) vs. 2 que no (corridas 1 y 4-rigor). Con
     mayoría 3-2 se cierra como hallazgo real (minor), siguiendo el mismo
@@ -493,7 +493,7 @@
   severity: minor
   screen: LoginEmailView
   steps:
-    - Intentar login con el email válido pero en mayúsculas (ej. JMATEVARGAS@POLIGRAN.EDU.CO) + password correcta
+    - Intentar login con el email válido pero en mayúsculas (ej. QA.TESTER@EXAMPLE.COM) + password correcta
     - Intentar con un espacio al final del email + password correcta
   expected:
     - Documentar el comportamiento real (puede ser válido que loguee igual, email no distingue mayúsculas típicamente) -- lo que sí sería raro es que el espacio al final rompa el match silenciosamente sin mensaje de error claro

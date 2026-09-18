@@ -34,13 +34,13 @@
     ofrece explícitamente dos botones "ENVIAR CÓDIGO" / "INGRESAR CON
     CONTRASEÑA" (antes solo se documentaba el flujo de código) -> se usó
     "INGRESAR CON CONTRASEÑA" -> LoginWithPasswordView, email
-    jmatevargas@poligran.edu.co + password Winner2025 (verificado char por
+    qa.tester@example.com + password Ex4mpleP4ss! (verificado char por
     char con MOSTRAR) -> Select -> login_success real confirmado por log,
     mismo IM histórico 30f41b94-1310-46e1-8627-fb31590ffef3,
     login_status:"connected", Home pasa a mostrar "Continuar viendo" y
     sidebar con ícono de cuenta. Identidad visible confirmada en captura
     (Home logueado). Logout re-confirmado también al principio de esta
-    corrida desde AccountPage ("Mi cuenta" -> jmatevargas@poligran.edu.co /
+    corrida desde AccountPage ("Mi cuenta" -> qa.tester@example.com /
     Mateo Vargas -> "Cerrar sesión") -> login_status pasa a "anonymous".
     Los 6 pasos del escenario (cold start deslogueado, prompt/estado de
     login, login exitoso, identidad visible, logout desde AccountPage,
@@ -88,7 +88,7 @@
     email" en este build lleva al MISMO formulario compartido que
     "Registrarme con email" (`RegEmailView`, GA4 marca
     `screen_name:"Register with Email"` para ambos). Al enviar
-    jmatevargas@poligran.edu.co + password incorrecta, el backend
+    qa.tester@example.com + password incorrecta, el backend
     respondió `HTTP 400 {"status":"ERROR","error":"EMAIL_ALREADY_REGISTERED"}`
     -- es decir, la app rechazó el intento PORQUE el email ya existe,
     sin llegar a validar la contraseña en ningún momento (evento GA4
@@ -121,14 +121,14 @@
     `LoginWithPasswordView : Init` (screen_name "Login with Password").
 
     Resultados por esa ruta real:
-    - Caso A (email inexistente noexiste.qa2026@poligran.edu.co + password
+    - Caso A (email inexistente noexiste.qa2026@example.com + password
       cualquiera): PASA. Backend responde HTTP 400
       {"status":"ERROR","error":"FEDERATION_INVALID_CREDENTIALS"}, GA4
       emite `login_error` con IM vacío, la UI muestra el mensaje genérico
       correcto "El usuario o contraseña son incorrectos" y permanece en
       LoginWithPasswordView sin crash.
-    - Caso B (email VÁLIDO jmatevargas@poligran.edu.co + password
-      DELIBERADAMENTE INCORRECTA "PasswordIncorrecta99", verificada
+    - Caso B (email VÁLIDO qa.tester@example.com + password
+      DELIBERADAMENTE INCORRECTA "WrongPass2026!", verificada
       carácter por carácter con el toggle MOSTRAR antes de confirmar):
       **BUG CRÍTICO REPRODUCIDO, NO ESTÁ ARREGLADO**. GA4 emite
       `login_success` con login_source:"email", new_user:false,
@@ -136,7 +136,7 @@
       30f41b94-1310-46e1-8627-fb31590ffef3 (el MISMO del login legítimo de
       AC-UL-01). La app navega a HomePage ya logueada, con fila
       "Continuar viendo" e ícono de cuenta en el sidebar, y AccountPage
-      muestra la identidad real completa ("jmatevargas@poligran.edu.co /
+      muestra la identidad real completa ("qa.tester@example.com /
       Mateo Vargas" + "Cerrar sesión"). Es decir: sesión plena y legítima
       obtenida con una contraseña incorrecta. 9na reproducción del bug, y
       la PRIMERA por la ruta de login real post-reorganización -- queda
@@ -161,7 +161,7 @@
   steps:
     - Ir a LoginRegPage (deslogueado)
     - "Caso A -- email incorrecto: ingresar un email que NO existe como cuenta (ej. variante inventada), contraseña cualquiera, confirmar"
-    - "Caso B -- password incorrecta: ingresar el email VÁLIDO (jmatevargas@poligran.edu.co) con una contraseña deliberadamente incorrecta, confirmar"
+    - "Caso B -- password incorrecta: ingresar el email VÁLIDO (qa.tester@example.com) con una contraseña deliberadamente incorrecta, confirmar"
     - "Caso C -- formato inválido: email sin @, o campo vacío, confirmar"
   expected:
     - Solo cuentas autorizadas pueden loguear -- en NINGÚN caso (A, B o C) debe terminar logueado
@@ -223,7 +223,7 @@
 
     RE-CONFIRMADO (2026-09-18, device 192.168.1.54, build v1.24.92609040) --
     mismo resultado: NO hay gating de login. Se hizo logout real desde
-    AccountPage (jmatevargas@poligran.edu.co / Mateo Vargas -> "Cerrar
+    AccountPage (qa.tester@example.com / Mateo Vargas -> "Cerrar
     sesión"), el sidebar pasó a mostrar el ícono "Ingresar" y la app quedó
     deslogueada. Estando deslogueado se seleccionó el hero live "A Quien
     Corresponda" desde Home y REPRODUJO directamente, sin pedir login:
@@ -263,7 +263,7 @@
     nativo Roku "Vamos a crear tu cuenta" (Continuar) -> RegEmailView
     ("Crear una cuenta", screen_name GA4 "Register with Email"). El email
     venía pre-cargado con la cuenta Roku (ottnext@mediastre.am); se REEMPLAZÓ
-    por un email de prueba inventado qa-test-2026-09-18-01@poligran.edu.co
+    por un email de prueba inventado qa-test-2026-09-18-01@example.com
     (NO se usó la cuenta real) + password válida QaTest2026 (8+ chars, 1
     mayúscula, 1 número -- verificada con toggle MOSTRAR carácter por
     carácter). REGISTRARME -> navega a "VERIFICA TU CUENTA" (screen_name
@@ -287,7 +287,7 @@
     - Seleccionar "Regístrate" / "Registrarme con email"
     - Completar el flujo con un email de prueba NUEVO (no uno ya registrado) y una contraseña de prueba, usando el teclado en pantalla
     - Confirmar el registro
-    - "Caso de error: intentar registrar con el email YA existente (jmatevargas@poligran.edu.co) y confirmar que muestra error de cuenta duplicada, no crash"
+    - "Caso de error: intentar registrar con el email YA existente (qa.tester@example.com) y confirmar que muestra error de cuenta duplicada, no crash"
     - "Caso de error: intentar registrar con formato inválido (email sin @, contraseña muy corta si aplica) y confirmar mensaje de error"
   expected:
     - El flujo de registro completa o pide verificación adicional (ej. email de confirmación) de forma clara, sin crash
@@ -320,7 +320,7 @@
     re-confirmado por la ruta de login real (LoginRegPage -> INGRESAR CON
     EMAIL -> diálogo nativo "Iniciar sesión" -> "Usar un correo electrónico
     diferente" -> LoginEmailView con email INEXISTENTE
-    noexiste.qa2026b@poligran.edu.co -> INGRESAR CON CONTRASEÑA ->
+    noexiste.qa2026b@example.com -> INGRESAR CON CONTRASEÑA ->
     LoginWithPasswordView). Se hicieron 3 intentos consecutivos de login
     con password (password verificada con MOSTRAR "Passw0rd1"): los 3
     rechazados con HTTP 400 {"status":"ERROR","error":"FEDERATION_INVALID_CREDENTIALS"}
@@ -377,7 +377,7 @@
     - 'CRÍTICO: si un código inventado resuelve login_success, es el mismo tipo de bug que AC-UL-02 pero en el flujo OTP'
   manual_verification_required: >
     PENDIENTE DE CONFIRMACIÓN HUMANA: el agente no tiene acceso a la bandeja
-    de email jmatevargas@poligran.edu.co. Dejar documentado en el reporte
+    de email qa.tester@example.com. Dejar documentado en el reporte
     que hace falta que el usuario confirme manualmente: (a) si efectivamente
     llegó un correo con un código real, (b) si ese código real sí loguea
     correctamente al probarlo. El agente solo puede confirmar la mitad
@@ -386,10 +386,10 @@
     RE-CONFIRMADO (2026-09-18, device 192.168.1.54, build v1.24.92609040) --
     la mitad automatizable PASA de nuevo. Flujo de login por código:
     LoginRegPage -> INGRESAR CON EMAIL -> "Usar un correo electrónico
-    diferente" -> LoginEmailView -> email válido jmatevargas@poligran.edu.co
+    diferente" -> LoginEmailView -> email válido qa.tester@example.com
     -> "ENVIAR CÓDIGO" -> navega a pantalla "Verify with Code" ("INICIA
     SESIÓN -- Ingresa el código de activación que enviamos a
-    jmatevargas@poligran.edu.co"): confirma que la app SÍ pide el código y
+    qa.tester@example.com"): confirma que la app SÍ pide el código y
     dice haberlo enviado. Código inventado "111111" -> backend HTTP 400
     {"status":"ERROR","error":"OTP_CODE_INVALID"}, evento GA4 login_error,
     NO login_success (nunca loguea). Sigue PENDIENTE la confirmación HUMANA:
@@ -405,7 +405,7 @@
     línea roja adicional ("No encontramos una cuenta asociada a este
     email. Verifica que esté bien...") SOLO para el email inexistente,
     mensaje limpio (sin línea roja) para el email válido
-    (jmatevargas@poligran.edu.co) -- mismo patrón exacto que las corridas
+    (qa.tester@example.com) -- mismo patrón exacto que las corridas
     2 y 3 (tiebreak). Conteo final: 3 de 5 corridas ven la fuga (corridas
     2, 3-tiebreak, 5-final20min) vs. 2 que no (corridas 1 y 4-rigor). Con
     mayoría 3-2 se cierra como hallazgo real (minor), siguiendo el mismo
@@ -428,13 +428,13 @@
     ambigüedad esta vez (ya no depende de mayoría 3-2). Se ejercitó
     "OLVIDÉ MI CONTRASEÑA" (screen_name "Forgot Password") con los dos
     emails en la misma corrida:
-    - Email INEXISTENTE (noexiste.qa2026b@poligran.edu.co): pantalla
+    - Email INEXISTENTE (noexiste.qa2026b@example.com): pantalla
       "Recupera tu contraseña" muestra el texto genérico + una LÍNEA ROJA
       adicional "No encontramos una cuenta asociada a este email. Verifica
       que esté bien...", y el backend responde HTTP 404
       {"status":"ERROR","error":"CUSTOMER_NOT_FOUND"} (prueba dura de la
       enumeración: el backend distingue explícitamente la no-existencia).
-    - Email VÁLIDO (jmatevargas@poligran.edu.co): MISMA pantalla pero con
+    - Email VÁLIDO (qa.tester@example.com): MISMA pantalla pero con
       mensaje LIMPIO "Enviamos un enlace de recuperación a tu email ...
       Sigue las instrucciones del correo para ingresar a tu cuenta", SIN
       línea roja.

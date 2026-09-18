@@ -63,7 +63,7 @@ function sleep(ms) {
 
 // El @ (y otros símbolos reservados de URL) SIEMPRE tienen que ir
 // URL-encoded explícito -- confirmado en sesión 2026-09-14 que LIT_@ crudo
-// a veces se pierde silenciosamente (produjo "jmatevargaspoligran.edu.co"
+// a veces se pierde silenciosamente (produjo "qa.testerexample.com"
 // sin arroba). encodeURIComponent ya lo resuelve para cualquier caracter,
 // no solo @.
 function literalKeyFor(char) {

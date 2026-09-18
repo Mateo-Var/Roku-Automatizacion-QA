@@ -40,7 +40,7 @@ es registro -- retroceder.
 
 #### 2. BUG CRÍTICO CONFIRMADO: login exitoso con contraseña incorrecta
 
-Por esa ruta real, con `jmatevargas@poligran.edu.co` + `PasswordIncorrecta99`
+Por esa ruta real, con `qa.tester@example.com` + `WrongPass2026!`
 (verificada carácter por carácter con el toggle MOSTRAR **antes** de confirmar):
 
 ```
@@ -50,7 +50,7 @@ GA4 login_success  login_source:"email"  new_user:false
 ```
 
 La app navega a HomePage ya logueada, con "Continuar viendo" e ícono de cuenta,
-y **AccountPage muestra la identidad completa: "jmatevargas@poligran.edu.co /
+y **AccountPage muestra la identidad completa: "qa.tester@example.com /
 Mateo Vargas" con botón "Cerrar sesión"**. O sea: sesión plena y legítima
 obtenida con una contraseña incorrecta. Es la **9ª reproducción** y la primera
 por la ruta de login real post-reorganización. **Queda descartado que el
@@ -413,7 +413,7 @@ el popup nativo con `ottnext@mediastre.am`, que ya tiene su propia
 salida documentada: "Usar un correo electrónico diferente"). El error de
 las 2 continuaciones previas fue no completar ese paso intermedio antes
 de juzgar el formulario de "Correo/Contraseña" real. Con
-`scripts/roku-type.js` se tipeó `jmatevargas@poligran.edu.co` sin
+`scripts/roku-type.js` se tipeó `qa.tester@example.com` sin
 problema, se cruzó a "INGRESAR CON CONTRASEÑA" (Right x11 + Down),
 tipeó una contraseña de prueba (`TestPassword123`, aprovechando el bug
 YA CONFIRMADO de bypass de contraseña `AC-SEC-LOGIN-EDGE-01`/AC-UL-02,
@@ -498,7 +498,7 @@ sesión (gran parte del tiempo se fue en resolver el login y en la
 batería de UPNEXT). Quedan PENDIENTES para la próxima sesión.
 
 Estado final del device: canal Azteca (`app id="dev"`) corriendo, Home,
-sesión CONECTADA (`jmatevargas@poligran.edu.co`, login persistente).
+sesión CONECTADA (`qa.tester@example.com`, login persistente).
 Evidencia: `reports/azteca/player/CORRIDA-device63-20260917/telnet.log`
 (creció a 20396 líneas), capturas 74 a 125.
 
@@ -515,7 +515,7 @@ Evidencia: `reports/azteca/player/CORRIDA-device63-20260917/telnet.log`
 ### 🆕 Sesión 2026-09-17 (continuación 5) — SC-PLAYER-CONTENT-MATRIX-01 parcial (Casos A y D confirmados), login sigue SIN restaurar
 
 Continuación directa de "continuación 4" (mismo problema de fondo: la
-cuenta `jmatevargas@poligran.edu.co` seguía deslogueada al arrancar esta
+cuenta `qa.tester@example.com` seguía deslogueada al arrancar esta
 continuación). Se intentó de nuevo, con más cuidado y capturas paso a
 paso, restaurar el login antes de seguir con la batería -- **tampoco se
 logró esta vez**. Detalle nuevo (no documentado en la continuación 4):
@@ -629,7 +629,7 @@ comparar el timestamp de la última línea del log contra la hora real; si
 hay más de unos segundos de diferencia, esperar y volver a verificar antes
 de actuar.
 
-**Hallazgo 2 (nuevo, real, no fabricado): la cuenta `jmatevargas@poligran.edu.co`
+**Hallazgo 2 (nuevo, real, no fabricado): la cuenta `qa.tester@example.com`
 se deslogueó durante esta sesión** (confirmado por captura de pantalla
 mostrando "Regístrate / Inicia sesión" y `login_status:"anonymous"` en el
 log de analytics tras un relanzamiento en frío). La causa más probable,
@@ -681,7 +681,7 @@ reconfirmó una sola conexión activa). Evidencia:
 ### 🆕 Sesión 2026-09-17 (continuación 3) — SC-FLOW-STRESS-01 (3/3) y SC-FLOW-CONTROLS-01 (14/14) COMPLETOS, SC-FLOW-EXIT-NAV-01 (5/5) CONFIRMADO
 
 Continuación directa de las 2 sesiones anteriores contra `192.168.1.63`
-(mismo device, misma cuenta logueada, `jmatevargas@poligran.edu.co`).
+(mismo device, misma cuenta logueada, `qa.tester@example.com`).
 Evidencia nueva: `reports/azteca/player/CORRIDA-device63-20260917/telnet.log`
 (creció de 5931 a 9300 líneas) + capturas 21 a 39. Detalle completo de cada
 check queda en el campo `status` de cada escenario en
@@ -881,7 +881,7 @@ en `reports/azteca/player/CORRIDA-device63-20260917/00-prerrequisitos.md`.
    exitosa.
 4. Sesión logueada confirmada por log GA4 real (`screen_view` de Home):
    `login_status:"connected"`, IM `30f41b94-1310-46e1-8627-fb31590ffef3`
-   -- coincide con la cuenta de prueba esperada (jmatevargas@poligran.edu.co).
+   -- coincide con la cuenta de prueba esperada (qa.tester@example.com).
    NO hizo falta login manual esta vez.
 
 **No se ejecutó ningún escenario de los 18** (ni siquiera SC-SHOW-01) por
@@ -1037,7 +1037,7 @@ sesiones -- listo para reportar con confianza máxima.
 
 1. **BUG CRÍTICO — bypass de contraseña** (`AC-UL-02`/`AC-SEC-LOGIN-EDGE-01`,
    severidad blocker/seguridad): con el email válido de una cuenta real
-   (`jmatevargas@poligran.edu.co`), **cualquier contraseña incorrecta de
+   (`qa.tester@example.com`), **cualquier contraseña incorrecta de
    longitud/complejidad suficiente resulta en login exitoso**. Una
    contraseña de 1 carácter SÍ se rechaza, pero contraseñas de 9-11+
    caracteres (aunque incorrectas) loguean igual. **11+ reproducciones
@@ -1154,7 +1154,7 @@ correr salvo sospecha de regresión. **Regresión completa corrida el
 ### ⏳ Pendiente real (no son tests a re-correr, son acciones distintas)
 
 - **Confirmación manual del usuario** (el agente no tiene acceso al email
-  real `jmatevargas@poligran.edu.co`): ¿llegó un código OTP real y loguea
+  real `qa.tester@example.com`): ¿llegó un código OTP real y loguea
   bien? ¿llegó el correo de "olvidé mi contraseña" y el link funciona?
 - **Armar y enviar el reporte formal** de los 3 hallazgos al equipo de
   Core/backend (posiblemente vía el mismo ticket de Monday que ya usa
@@ -1181,8 +1181,8 @@ correr salvo sospecha de regresión. **Regresión completa corrida el
   confirmado que NO es el compartido de firmado de CI/CD). La IP puede
   cambiar entre sesiones -- preguntar siempre al usuario primero.
 - Credenciales de test guardadas en `.env` (no versionado) y en esta
-  memoria donde hizo falta documentar un hallazgo (`jmatevargas@poligran.edu.co`
-  / `Winner2025`) -- cuenta real de prueba del usuario, tratar como
+  memoria donde hizo falta documentar un hallazgo (`qa.tester@example.com`
+  / `Ex4mpleP4ss!`) -- cuenta real de prueba del usuario, tratar como
   sensible en reportes externos igual que cualquier credencial real.
 
 ---
@@ -1314,7 +1314,7 @@ problema de ".186 ocupado".
 
 Al conectar, el device ya tenía una sesión activa (`login_status:"connected"`)
 pero con la cuenta `lol2@gmail.com` / "Winner" -- NO
-`jmatevargas@poligran.edu.co`. Se cerró sesión y se logueó con la cuenta
+`qa.tester@example.com`. Se cerró sesión y se logueó con la cuenta
 correcta antes de arrancar cualquier escenario. Login final confirmado:
 mismo IM real `30f41b94-1310-46e1-8627-fb31590ffef3` ya documentado para esta
 cuenta en sesiones contra `.186` -- confirma que es la MISMA cuenta de
@@ -1480,7 +1480,7 @@ preexistente y pertenece al `.186`, fuera del alcance de esta sesión.
 
 ### Estado final del device .63
 
-Home, logueado (`jmatevargas@poligran.edu.co`, `login_status:"connected"`,
+Home, logueado (`qa.tester@example.com`, `login_status:"connected"`,
 mismo IM real `30f41b94-1310-46e1-8627-fb31590ffef3`), confirmado con
 captura final
 (`reports/azteca/navegacion/CORRIDA-EXTENDIDA-device63-20260915/62-FINAL-home-loggedin.jpg`,
@@ -1494,7 +1494,7 @@ Pedido explícito del usuario: corrida FORMAL y DETALLISTA de los 15
 escenarios de navegación ya escritos en la exploración anterior,
 confirmando cada `expected` con evidencia real (log y captura donde
 correspondía), con autocorrección activa ante cualquier desvío. Device
-192.168.1.186, sesión con la cuenta real (`jmatevargas@poligran.edu.co`).
+192.168.1.186, sesión con la cuenta real (`qa.tester@example.com`).
 Evidencia completa (telnet.log de 1339 líneas + 37 capturas numeradas) en
 `reports/azteca/navegacion/CORRIDA-FORMAL-20260915-2200/`.
 
@@ -1603,7 +1603,7 @@ interfirió con la conexión.
 
 ### Estado final del device
 
-Home, logueado (`jmatevargas@poligran.edu.co`, `login_status:"connected"`,
+Home, logueado (`qa.tester@example.com`, `login_status:"connected"`,
 mismo IM `30f41b94-1310-46e1-8627-fb31590ffef3`), confirmado con captura
 final (`reports/azteca/navegacion/CORRIDA-FORMAL-20260915-2200/37-FINAL-home-loggedin.jpg`,
 "Continuar viendo" visible, confirma persistencia de cuenta).
@@ -1616,7 +1616,7 @@ Pedido explícito del usuario: explorar Home/Discover/EPG/Search/Favoritos/
 ShowPage con log+captura hasta ENTENDER cómo funcionan de verdad, y recién
 ahí escribir los escenarios (no al revés) -- mismo espíritu que
 login-registro. Corrida contra el device real (192.168.1.186), sesión ya
-logueada (`jmatevargas@poligran.edu.co`, persistida de sesiones previas).
+logueada (`qa.tester@example.com`, persistida de sesiones previas).
 Evidencia completa (telnet.log + 42 capturas) en
 `reports/azteca/navegacion/EXPLORACION-20260915-1900/`.
 
@@ -1713,7 +1713,7 @@ corrida. Sigue pendiente investigar de dónde viene si vuelve a causar
 
 ### Estado final del device
 
-Home, logueado (`jmatevargas@poligran.edu.co`, `login_status:"connected"`),
+Home, logueado (`qa.tester@example.com`, `login_status:"connected"`),
 confirmado con captura final
 (`reports/azteca/navegacion/EXPLORACION-20260915-1900/42-FINAL-home-loaded.jpg`).
 
@@ -1815,8 +1815,8 @@ que no estaban documentados con suficiente detalle.
 
 ### Resultado por escenario (los 8, todos CONFIRMADOS, sin regresión)
 
-- **AC-UL-01**: PASÓ. Login con cuenta real (`jmatevargas@poligran.edu.co`
-  / `Winner2025`) exitoso (`login_success`, `login_status:"connected"`),
+- **AC-UL-01**: PASÓ. Login con cuenta real (`qa.tester@example.com`
+  / `Ex4mpleP4ss!`) exitoso (`login_success`, `login_status:"connected"`),
   identidad visible confirmada en "Mi cuenta" (email + "Mateo Vargas").
   Logout confirmado (`login_status:"anonymous"` en Home). Capturas 03, 04,
   05, 11.
@@ -1837,7 +1837,7 @@ que no estaban documentados con suficiente detalle.
 - **AC-REG-01**: PASÓ los 3 casos. Caso 1 (registro nuevo,
   `qa-completo2-<timestamp>@example.com`): avanza a `RegVerifyCode`
   ("Verify with Code"), pide verificación por email, sin bypass. Caso 2
-  (email duplicado, `jmatevargas@poligran.edu.co`): rechazo limpio
+  (email duplicado, `qa.tester@example.com`): rechazo limpio
   `EMAIL_ALREADY_REGISTERED`, sin crear cuenta duplicada. Caso 3 (password
   débil "abc"): rechazo client-side "La contraseña debe tener al menos 8
   caracteres". Capturas 12, 13, 14.
@@ -1857,7 +1857,7 @@ que no estaban documentados con suficiente detalle.
   trimea bien y logueó normal con la password real. Capturas 08, 09, 10.
 - **AC-SEC-03**: PASÓ la mitad automatizable. "Ingresar con código" con
   email válido confirma que "envía" el código (pantalla dice
-  `jmatevargas@poligran.edu.co`). Código inventado "000000" rechazado con
+  `qa.tester@example.com`). Código inventado "000000" rechazado con
   `OTP_CODE_INVALID`, sin login. Sigue pendiente confirmación HUMANA de si
   llegó un código real y si loguea. Captura 15.
 - **AC-SEC-04**: comparación hecha, mensaje **SIN fuga** esta vez -- el
@@ -1929,7 +1929,7 @@ conexión vieja antes de pedir otro reinicio físico del device.
 ### Estado final del device
 
 Dejado en Home, logueado con la cuenta real
-(`jmatevargas@poligran.edu.co`), confirmado con captura final
+(`qa.tester@example.com`), confirmado con captura final
 (`18-FINAL-home-logueado-confirmado.jpg`, muestra fila "Continuar viendo"
 personalizada). Sin cambios de hallazgos respecto a los 3 ya documentados
 en el resumen ejecutivo, salvo el ajuste de confianza en AC-SEC-04 (ver
@@ -1963,8 +1963,8 @@ ubicado.**
 
 **Validación funcional de `scripts/roku-type.js`:** confirmado end-to-end
 con verificación de log carácter por carácter (`Lit_<char> press`) Y con
-captura MOSTRAR -- tipeó `jmatevargas@poligran.edu.co` (27 chars) y
-`Winner2025` (10 chars) exactos, sin pérdida de caracteres, en dos pasadas
+captura MOSTRAR -- tipeó `qa.tester@example.com` (27 chars) y
+`Ex4mpleP4ss!` (10 chars) exactos, sin pérdida de caracteres, en dos pasadas
 distintas. Login final exitoso confirmado por evento `login_success`
 (`login_status":"connected"`, `login_source":"email"`) -- el script sigue
 funcionando idéntico a como está documentado.
@@ -1985,7 +1985,7 @@ mostrando `ottnext@mediastre.am` sin cambios -- el diálogo nativo estaba
 tapando la pantalla real y absorbiendo el submit, mientras BrightScript
 seguía logueando los eventos de teclado en paralelo. Al reintentar
 saliendo primero por "Usar un correo electrónico diferente" (como indica
-el runbook), el campo mostró correctamente `jmatevargas@poligran.edu.co`
+el runbook), el campo mostró correctamente `qa.tester@example.com`
 tipeado y el login final funcionó al primer intento limpio. **Conclusión:
 el runbook ya tenía la instrucción correcta para este caso -- el error fue
 no seguirla al pie de la letra en el primer intento, no un problema del
@@ -2000,7 +2000,7 @@ de ≤20 min, casi enteramente por el diagnóstico del diálogo nativo
 descripto arriba (4 pasadas de screenshot + 2 reintentos de navegación).
 La mecánica de archivos/rutas en sí no agregó tiempo.
 
-Device dejado en Home, logueado con `jmatevargas@poligran.edu.co`,
+Device dejado en Home, logueado con `qa.tester@example.com`,
 confirmado con captura final
 (`reports/azteca/login-registro/VERIFICACION-REORG-20260915-1/FINAL-home-logueado.jpg`).
 Socket telnet cerrado limpio (verificado `TIME_WAIT`, sin proceso
@@ -2026,11 +2026,11 @@ ni apareció rate limiting nuevo, ni crasheó nada que antes no crasheara.
 
 | Escenario | Resultado | Evidencia clave |
 |---|---|---|
-| **AC-UL-01** | SOSTENIDO | Cold boot deslogueado → Home anónimo con "Ingresar" en sidebar (`04-coldboot-anonymous-home.jpg`); login real con `jmatevargas@poligran.edu.co`/`Winner2025` → `login_success`, mismo IM real `30f41b94-1310-46e1-8627-fb31590ffef3`; logout → `login_status:"anonymous"`; captura final `43-FINAL-home-loggedin.jpg` |
+| **AC-UL-01** | SOSTENIDO | Cold boot deslogueado → Home anónimo con "Ingresar" en sidebar (`04-coldboot-anonymous-home.jpg`); login real con `qa.tester@example.com`/`Ex4mpleP4ss!` → `login_success`, mismo IM real `30f41b94-1310-46e1-8627-fb31590ffef3`; logout → `login_status:"anonymous"`; captura final `43-FINAL-home-loggedin.jpg` |
 | **AC-UL-02** | SOSTENIDO | Caso A (email inexistente) y Caso C (formato inválido, `sinarroba`) rechazados limpio (`08-diag-invalidformat.jpg`, "Formato de correo inválido"). Caso B (bug crítico) no se re-buscó activamente por instrucción del runbook, pero tampoco se vio ningún indicio de que se haya corregido |
 | **AC-UL-03** | SOSTENIDO (reconfirmado de forma temprana/casual) | El cold start inicial de la sesión arrancó DIRECTO logueado con la cuenta real (persistencia de sesión intacta) -- confirmado con captura `02-diag-accountpage.jpg` mostrando "Mateo Vargas" / email real antes de forzar el logout manual para poder probar el resto de la batería |
 | **AC-UL-04** | SOSTENIDO | Contenido Live (`Hechos AM`) reprodujo sin pedir login: `screen_name:"Player"`, `login_status:"anonymous"` |
-| **AC-REG-01** | SOSTENIDO (parcial -- caso duplicado confirmado con captura; caso nuevo/password débil no repetidos por tiempo) | Email duplicado (`jmatevargas@poligran.edu.co`) → "Este email ya está registrado" (`39-diag-currentstate.jpg`), sin crash, sin crear cuenta duplicada |
+| **AC-REG-01** | SOSTENIDO (parcial -- caso duplicado confirmado con captura; caso nuevo/password débil no repetidos por tiempo) | Email duplicado (`qa.tester@example.com`) → "Este email ya está registrado" (`39-diag-currentstate.jpg`), sin crash, sin crear cuenta duplicada |
 | **AC-SEC-LOGIN-EDGE-01** | SOSTENIDO | Sub-caso A (fuerza bruta, email inexistente): 2 intentos consecutivos rechazados (`FEDERATION_INVALID_CREDENTIALS`, luego `CUSTOMER_NOT_FOUND`), sin ninguna fricción/HTTP 429 -- la ausencia de rate limiting se sostiene. Sub-caso B (password vacía/1 char, email válido): vacía → "Se requiere contraseña" (client-side, `21-diag-emptypw-result.jpg`); nunca loguea |
 | **AC-SEC-03** | SOSTENIDO | Código OTP inventado (`000000`) con email válido → `OTP_CODE_INVALID`, mensaje visible "El código que ingresaste es incorrecto o ha expirado" (`23-diag-postotp.jpg`) |
 | **AC-SEC-04** | NO RE-VERIFICADO este ciclo (sin tiempo) | Ya desempatado 3-2 en sesión anterior: no se repitió la comparación de mensajes por presión de tiempo. No hay motivo para sospechar cambio |
@@ -2071,7 +2071,7 @@ re-entraba a "Ingresar con email" o "Registrarme con email" desde cero
 siempre por "Usar un correo electrónico diferente"/"Cancelar".
 
 **Cierre de la corrida:** device dejado en Home, logueado con la cuenta
-real (`jmatevargas@poligran.edu.co`), confirmado con captura final
+real (`qa.tester@example.com`), confirmado con captura final
 `43-FINAL-home-loggedin.jpg`. Proceso de captura telnet (`node
 scripts/telnet-capture.js`) cerrado limpio vía `taskkill`, verificado sin
 procesos `node.exe` residuales (`tasklist`) y sin conexiones abiertas al
@@ -2830,7 +2830,7 @@ ambiguas) y correr el resto de la batería contra `192.168.1.186`.
 
 ### 🔴 AC-UL-02 — BUG REAL CONFIRMADO: la app acepta CUALQUIER contraseña para un email YA REGISTRADO
 
-**Hallazgo crítico**: con el email válido `jmatevargas@poligran.edu.co` +
+**Hallazgo crítico**: con el email válido `qa.tester@example.com` +
 una contraseña **deliberadamente incorrecta** (`WrongPass999`, confirmada
 carácter por carácter con el toggle "MOSTRAR" activado — ver captura
 `reports/azteca/login-registro/AC-UL-02-20260914-run2/30-MOSTRAR-final.jpg`,
@@ -2839,7 +2839,7 @@ ambigüedad posible), el login **se resuelve exitosamente**:
 `login_success` / `login_status:"connected"` en el log, `IM` igual al de
 la cuenta real (`30f41b94-1310-46e1-8627-fb31590ffef3`), la app navega a
 Home personalizado, y `AccountPage` muestra los datos reales de la cuenta
-(`jmatevargas@poligran.edu.co`, `Mateo Vargas`) — capturas
+(`qa.tester@example.com`, `Mateo Vargas`) — capturas
 `33-BUG-CONFIRMED-wrongpw-loggedin.jpg` y `35-account.jpg` (esta última en
 la subcarpeta de sidebar-check, mismo hallazgo).
 
@@ -2939,7 +2939,7 @@ ninguno en la exploración de Home/Top10/MicroDramas/Programas.
    `@example.com` no es un inbox real, pero confirma que el registro NO
    crea sesión activa sin verificar el email primero — sin bypass).
 2. **Email duplicado** (mismo email que la cuenta válida
-   `jmatevargas@poligran.edu.co`): rechazado correctamente con
+   `qa.tester@example.com`): rechazado correctamente con
    `EMAIL_ALREADY_REGISTERED` y mensaje visible "Este email ya está
    registrado" — no logueó, no creó duplicado. Captura
    `23-dup-result.jpg`.
@@ -2952,7 +2952,7 @@ Evidencia completa: `reports/azteca/login-registro/AC-REG-01-20260914/`.
 ### Estado final del device al cerrar la sesión
 
 App en Home, **logueada con la cuenta válida**
-(`jmatevargas@poligran.edu.co`), confirmado con `login_success` en el log
+(`qa.tester@example.com`), confirmado con `login_success` en el log
 y captura final `reports/azteca/login-registro/AC-REG-01-20260914/35-FINAL-confirmed.jpg`
 (shelf "Continuar viendo" visible = sesión activa).
 
@@ -2993,7 +2993,7 @@ para que no se repita.
 ### AC-SEC-01 (CRITICO): ni siquiera hizo falta fuerza bruta, el intento 1 ya logueo con password incorrecta
 
 Mismo bug que AC-UL-02 (sesion anterior), reconfirmado por tercera vez
-independiente: email valido (jmatevargas@poligran.edu.co) + password
+independiente: email valido (qa.tester@example.com) + password
 incorrecta tipeada y verificada con MOSTRAR antes de enviar
 (WrongPass1, confirmada caracter por caracter en
 11-MOSTRAR-attempt1.jpg) -> login_success con el IM real de la
@@ -3014,7 +3014,7 @@ contrasena" como hipotesis completa -- el patron parece mas especifico
 truncado? hay alguna normalizacion que colapsa ciertas strings?). Dato
 para pasarle al equipo de backend junto con el reporte: probar
 especificamente con contrasenas de longitud similar a la real
-(Winner2025, 10 caracteres) pero con contenido distinto, ya que
+(Ex4mpleP4ss!, 10 caracteres) pero con contenido distinto, ya que
 WrongPass1 tambien tiene 10 caracteres.
 
 ### AC-SEC-02: PASO correctamente en ambos casos
@@ -3040,7 +3040,7 @@ algo de rate limiting (a diferencia del login por password).
 
 PENDIENTE DE CONFIRMACION HUMANA (como estaba previsto en el
 escenario): el agente no tiene acceso a la bandeja
-jmatevargas@poligran.edu.co. Falta que el usuario confirme manualmente
+qa.tester@example.com. Falta que el usuario confirme manualmente
 (a) si llego un codigo real al correo, y (b) si ese codigo real loguea
 correctamente.
 
@@ -3068,14 +3068,14 @@ generar comportamiento anomalo.
 
 ### AC-SEC-06: PASO, comportamiento documentado (no bug)
 
-- Email en MAYUSCULAS (JMATEVARGAS@POLIGRAN.EDU.CO) + password
-  correcta (Winner2025) -> rechazado (FEDERATION_INVALID_CREDENTIALS,
+- Email en MAYUSCULAS (QA.TESTER@EXAMPLE.COM) + password
+  correcta (Ex4mpleP4ss!) -> rechazado (FEDERATION_INVALID_CREDENTIALS,
   mensaje visible 44-uppercase-rejected.jpg). El login es case-sensitive
   en el email - no es lo mas comun (la mayoria de los sistemas normalizan a
   minusculas) pero tampoco es un bug de seguridad, es un dato de UX a
   documentar (podria generar tickets de soporte de usuarios que tipean con
   Caps Lock activado sin darse cuenta en un control remoto).
-- Email con espacio al final (jmatevargas@poligran.edu.co + espacio)
+- Email con espacio al final (qa.tester@example.com + espacio)
   + password correcta -> logueo exitosamente (login_success,
   confirmado en el log). El backend trimea espacios - comportamiento
   correcto y esperado, descarta el riesgo que el escenario advertia
@@ -3115,14 +3115,14 @@ no re-hidrata el campo de email de forma confiable via navegacion con
 control remoto (aunque si se llega ahi siguiendo el flujo normal
 Email->Password si queda precompletado). Otra confirmacion reforzada: el
 caracter @ via LIT_@ sin codificar a veces no se registra (se perdio
-una vez al tipear el email, produciendo jmatevargaspoligran.edu.co sin
+una vez al tipear el email, produciendo qa.testerexample.com sin
 arroba) - usar siempre LIT_%40 explicito (URL-encoded) para el
 arroba, nunca LIT_@ crudo.
 
 ### Estado final del device al cerrar esta sesion
 
 App en Home, logueada con la cuenta valida
-(jmatevargas@poligran.edu.co / Winner2025), confirmado con
+(qa.tester@example.com / Ex4mpleP4ss!), confirmado con
 login_success en el log y captura final
 reports/azteca/login-registro/AC-SEC-01-20260914-103846/52-FINAL-loggedin-home.jpg
 (shelf "Continuar viendo" visible). Socket telnet cerrado limpiamente via
@@ -3207,9 +3207,9 @@ comparación con capturas.
 
 Con sesión cerrada, se navegó a "Olvidé mi contraseña" dos veces:
 
-- Email válido/existente (`jmatevargas@poligran.edu.co`): mensaje
+- Email válido/existente (`qa.tester@example.com`): mensaje
   "Recupera tu contraseña — Enviamos un enlace de recuperación a tu email
-  jmatevargas@poligran.edu.co. Sigue las instrucciones del correo para
+  qa.tester@example.com. Sigue las instrucciones del correo para
   ingresar a tu cuenta." (captura `12-forgot-valid-email.jpg`).
 - Email inexistente (`noexiste-qa-test@example.com`): **mensaje textualmente
   idéntico** salvo el email interpolado — "Enviamos un enlace de
@@ -3230,7 +3230,7 @@ crítico para responder la pregunta del escenario.
 **PENDIENTE DE CONFIRMACIÓN HUMANA (como marca el YAML):** el agente no
 tiene acceso a ninguna de las dos bandejas de email. Falta que el usuario
 confirme manualmente si realmente llegó un correo a
-`jmatevargas@poligran.edu.co` y si NO llegó nada a la dirección inventada
+`qa.tester@example.com` y si NO llegó nada a la dirección inventada
 (`noexiste-qa-test@example.com`, que además ni siquiera es un inbox real).
 
 ### Hipótesis de longitud (AC-UL-02/AC-SEC-01) — REFUTADA con 2 muestras nuevas: el bug NO depende de que la longitud coincida con la real
@@ -3238,7 +3238,7 @@ confirme manualmente si realmente llegó un correo a
 Con el email válido, se probaron dos contraseñas incorrectas dirigidas,
 ambas verificadas con MOSTRAR + captura antes de enviar:
 
-- **9 caracteres** (`WrongPas1`, un carácter menos que la real `Winner2025`
+- **9 caracteres** (`WrongPas1`, un carácter menos que la real `Ex4mpleP4ss!`
   de 10): confirmada en claro en captura `23-MOSTRAR-9char.jpg` →
   **`login_success` / `login_status:"connected"`**, mismo `IM` real
   (`30f41b94-1310-46e1-8627-fb31590ffef3`), Home personalizado con
@@ -3323,7 +3323,7 @@ contención ante fuerza bruta. Evidencia: capturas `15` a `18`.
 
 ### AC-SEC-05 (aislado en campo password) — el string de inyección NO crasheó, pero SÍ disparó el mismo bug crítico ya conocido
 
-Con el email válido (`jmatevargas@poligran.edu.co`) llegado por el flujo
+Con el email válido (`qa.tester@example.com`) llegado por el flujo
 normal Email→Password, se tipeó `abc'or1=1--` en el campo password
 (verificado carácter por carácter vía log Y visualmente con MOSTRAR,
 captura `20-MOSTRAR-injection.jpg`, texto en claro exacto). Al confirmar:
@@ -3358,7 +3358,7 @@ AC-SEC-07 completamente cerrado en ambos campos.
 ### Estado final del device al cerrar esta sesión
 
 App en Home, logueada con la cuenta válida usando la contraseña REAL
-(`jmatevargas@poligran.edu.co` / `Winner2025`, tipeada con
+(`qa.tester@example.com` / `Ex4mpleP4ss!`, tipeada con
 `roku-type.js` y confirmada por `login_success` en el log) — captura
 final `reports/azteca/login-registro/AC-SEC-01B-20260914-135206/23-FINAL-loggedin-home.jpg`
 (shelf "Continuar viendo" visible). Socket telnet cerrado explícitamente
@@ -3408,7 +3408,7 @@ para el próximo Agente Player.
 ### Estado final del device al cerrar esta sesión
 
 App en Home, logueada con la cuenta válida usando la contraseña REAL
-(`jmatevargas@poligran.edu.co` / `Winner2025`, tipeada y verificada
+(`qa.tester@example.com` / `Ex4mpleP4ss!`, tipeada y verificada
 carácter por carácter, sin el bug esta vez porque se usó la contraseña
 correcta a propósito para dejar el device en un estado limpio) — confirmado
 `login_success`/`login_status:"connected"` en el log y captura final
@@ -3451,7 +3451,7 @@ efectiva:
   de login apareció un diálogo NUEVO no documentado antes (ver hallazgo
   abajo) que consumió el resto del tiempo disponible. Se logró UNA sola
   variante completa: **login real con credenciales correctas**
-  (`jmatevargas@poligran.edu.co` / `Winner2025`) → `login_success` /
+  (`qa.tester@example.com` / `Ex4mpleP4ss!`) → `login_success` /
   `login_status:"connected"`, mismo `IM` de siempre
   (`30f41b94-1310-46e1-8627-fb31590ffef3`), Home personalizado — cierra
   **AC-UL-01 parte 2**. Las variantes de AC-SEC-01/02/05/06/07 (password
@@ -3516,7 +3516,7 @@ documentada, reforzada de nuevo acá).
 ### Estado final del device al cerrar esta sesión
 
 App en Home, logueada con la cuenta válida real
-(`jmatevargas@poligran.edu.co` / `Winner2025`), confirmado con
+(`qa.tester@example.com` / `Ex4mpleP4ss!`), confirmado con
 `login_success` / `login_status:"connected"` en el log y captura final
 `reports/azteca/login-registro/LOGIN-REGISTRO-FULL-20260914-1417/12-FINAL-loggedin-home.jpg`
 (shelf "Continuar viendo" visible). Socket telnet cerrado con `taskkill`
@@ -3589,9 +3589,9 @@ veredicto limpio sobre la velocidad, como pidió el usuario.
     reconfirmado sin cambios.
   - Email con espacio final + password correcta → **AC-SEC-06 (espacio)**:
     `login_success` real, el backend trimea espacios correctamente.
-  - Email válido + password real (`Winner2025`) → **login exitoso real,
+  - Email válido + password real (`Ex4mpleP4ss!`) → **login exitoso real,
     cierra AC-UL-01 parte 2** — confirmado con captura de "Mi cuenta"
-    mostrando `jmatevargas@poligran.edu.co` / "Mateo Vargas" en claro.
+    mostrando `qa.tester@example.com` / "Mateo Vargas" en claro.
 - **Fase 3 (Registro, AC-REG-01) — ✅ CONFIRMADO LIMPIO, los 3 casos, sin
   ambigüedad esta vez** (a diferencia de la corrida anterior que se
   cortó a medias). Con navegación campo-por-campo verificada con captura
@@ -3600,7 +3600,7 @@ veredicto limpio sobre la velocidad, como pidió el usuario.
      `QaFinal2025`) → pantalla "VERIFICA TU CUENTA" pidiendo código de
      activación, sin bypass, sin sesión creada — confirmado por log
      (`screen_name:"Verify with Code"`).
-  2. Email duplicado (`jmatevargas@poligran.edu.co`) → rechazado
+  2. Email duplicado (`qa.tester@example.com`) → rechazado
      limpio: "Este email ya está registrado", sin duplicar cuenta, sin
      loguear.
   3. Password débil (`abc`) → rechazado client-side: "La contraseña debe
@@ -3676,7 +3676,7 @@ a todas las pantallas con teclado en pantalla.
 ### Estado final del device al cerrar esta sesión
 
 App en Home, **logueada con la cuenta válida real**
-(`jmatevargas@poligran.edu.co` / `Winner2025`), confirmado con
+(`qa.tester@example.com` / `Ex4mpleP4ss!`), confirmado con
 `login_status:"connected"` + mismo IM real tras un cold restart genuino
 (no un re-foco) y captura final
 `reports/azteca/login-registro/LOGIN-REGISTRO-FULL-v2-20260914-1434/103-FINAL-persistence.jpg`
@@ -3697,7 +3697,7 @@ reverificado con `netstat` sin conexiones huérfanas.
    corrida lo vio así, la sesión anterior no, hace falta desempatar con
    el mismo criterio de rigor usado para el bug crítico.
 3. Pedirle al usuario la confirmación manual pendiente de siempre:
-   código OTP real recibido en `jmatevargas@poligran.edu.co` (AC-SEC-03)
+   código OTP real recibido en `qa.tester@example.com` (AC-SEC-03)
    y el email real de "Olvidé mi contraseña" (AC-SEC-04) — el agente no
    tiene acceso a esa bandeja.
 4. Considerar levantar como ticket de UX (no solo nota operativa) el
@@ -3719,7 +3719,7 @@ mi contraseña" SÍ filtra si un email está registrado o no.**
 
 - Email existente (en este caso `ottnext@mediastre.am`, la cuenta Roku
   vinculada que quedó pre-cargada por el diálogo nativo — no se pudo forzar
-  `jmatevargas@poligran.edu.co` porque el primer intento de esa sesión cayó
+  `qa.tester@example.com` porque el primer intento de esa sesión cayó
   en el diálogo nativo de cuenta): mensaje único "Recupera tu contraseña —
   Enviamos un enlace de recuperación a tu email ottnext@mediastre.am...",
   **sin** línea roja adicional. Captura `01-forgot-valid.jpg`.
@@ -3743,7 +3743,7 @@ de mayoría/rigor usado para el bug crítico (`AC-UL-02`) aplica acá también:
 investiga más a fondo el motivo puntual, no amerita otra corrida.
 
 **Nota**: no se pudo confirmar el caso "email existente" con la cuenta de
-prueba real `jmatevargas@poligran.edu.co` por segunda vez en esta corrida
+prueba real `qa.tester@example.com` por segunda vez en esta corrida
 (el diálogo nativo de Roku volvió a interceptar y precargó
 `ottnext@mediastre.am`) — de todos modos es válido como caso de control
 porque `ottnext@mediastre.am` es una cuenta real/existente y el contraste
@@ -3751,7 +3751,7 @@ entre "existe" (sin línea roja) vs "no existe" (con línea roja) es lo que
 importa para este escenario, no qué email puntual se usó.
 
 **Estado final del device al cerrar esta corrida**: `Home` presionado tras
-login exitoso con `jmatevargas@poligran.edu.co` / `Winner2025`
+login exitoso con `qa.tester@example.com` / `Ex4mpleP4ss!`
 (`login_status:"connected"`, mismo IM real
 `30f41b94-1310-46e1-8627-fb31590ffef3`), captura
 `reports/azteca/login-registro/AC-SEC-04-tiebreak-20260914-151506/03-final-home.jpg`.
@@ -3811,7 +3811,7 @@ operativos genuinos que sí ameritan quedar documentados (ver más abajo).
 - **Fase 3 (Registro, AC-REG-01) -- CONFIRMADA, los 3 casos limpios**:
   registro nuevo (`qa-final-rigor-<timestamp>@example.com`) →
   `screen_name:"Verify with Code"`, sin bypass (captura `99-...`); email
-  duplicado (`jmatevargas@poligran.edu.co`) → `EMAIL_ALREADY_REGISTERED`,
+  duplicado (`qa.tester@example.com`) → `EMAIL_ALREADY_REGISTERED`,
   mensaje visible "Este email ya está registrado" (captura
   `108-dup-result.jpg`); password débil (`abc`) → rechazo client-side "La
   contraseña debe tener al menos 8 caracteres" (captura
@@ -3908,7 +3908,7 @@ confirmado (una sola ocurrencia, no reproducida a propósito).
 ### Estado final del device al cerrar esta sesión
 
 App en Home, **logueada con la cuenta válida real**
-(`jmatevargas@poligran.edu.co` / `Winner2025`), confirmado con
+(`qa.tester@example.com` / `Ex4mpleP4ss!`), confirmado con
 `login_status:"connected"` + mismo IM real tras un cold restart genuino
 (`telnet4.log`, línea `Running dev` fresca) y captura final
 `reports/azteca/login-registro/LOGIN-REGISTRO-RIGOR-20260914-154433/145-FINAL-persistence-home.jpg`
@@ -3959,7 +3959,7 @@ total quedó muy por debajo del límite.
 
 - **AC-UL-01** (parte 1 + parte 2): ✅ reconfirmado. Cold boot deslogueado
   → `login_status:"anonymous"` en Home; login real con
-  `jmatevargas@poligran.edu.co`/`Winner2025` → `login_success`, mismo IM
+  `qa.tester@example.com`/`Ex4mpleP4ss!` → `login_success`, mismo IM
   real (`30f41b94-1310-46e1-8627-fb31590ffef3`), Home personalizado.
 - **AC-UL-02** / **AC-SEC-LOGIN-EDGE-01**: no re-ejecutado esta corrida (ya
   DONE con 11+ reproducciones independientes, instrucción explícita de no
@@ -3980,7 +3980,7 @@ total quedó muy por debajo del límite.
 ### AC-SEC-04 — 5ta corrida de desempate: CONFIRMADO, SÍ filtra si el email existe
 
 Con sesión cerrada, se navegó a "Olvidé mi contraseña" dos veces:
-- Email válido (`jmatevargas@poligran.edu.co`): mensaje limpio "Recupera tu
+- Email válido (`qa.tester@example.com`): mensaje limpio "Recupera tu
   contraseña -- Enviamos un enlace de recuperación a tu email...", **sin**
   línea roja adicional. Captura `10-forgot-valid-email.jpg`.
 - Email inexistente (`noexiste-final20min-qa@example.com`): mismo mensaje
@@ -4030,7 +4030,7 @@ costó esta corrida.
 ### Estado final del device al cerrar esta corrida
 
 App en Home, **logueada con la cuenta válida real**
-(`jmatevargas@poligran.edu.co` / `Winner2025`), confirmado con
+(`qa.tester@example.com` / `Ex4mpleP4ss!`), confirmado con
 `login_status:"connected"` + mismo IM real en el log y captura final
 `reports/azteca/login-registro/LOGIN-REGISTRO-FINAL20MIN-20260914-1628/27-FINAL-loggedin-home.jpg`
 (sidebar "Mi cuenta"/shelf "Continuar viendo" visibles). Socket telnet
@@ -4156,7 +4156,7 @@ reverificado con `tasklist` sin procesos `node.exe` remanentes). Device
 relanzado (`launch/dev`) y confirmado en Home, `active-app` con `id="dev"`,
 y el último `screen_view` real del log mostrando
 `login_status:"connected"` -- logueado con la cuenta válida
-(`jmatevargas@poligran.edu.co`). Captura final:
+(`qa.tester@example.com`). Captura final:
 `reports/azteca/analytics/RECONFIRMACION-CATEGORY-20260915-2300/99-final-home-logged-in.jpg`.
 
 ### Pendiente para la próxima sesión
@@ -4195,8 +4195,8 @@ Azteca En Vivo" v1.24.92609040 reconfirmado sin cambios vía `query/apps`):
   Para completar login real hay que navegar explícitamente hasta
   "INGRESAR CON CONTRASEÑA". Vale la pena que el runbook lo aclare para
   la próxima corrida (no llegué a editarlo, solo el YAML de AC-UL-01).
-- **Login real exitoso**: email `jmatevargas@poligran.edu.co` + password
-  `Winner2025` (verificado char por char con MOSTRAR antes de enviar) ->
+- **Login real exitoso**: email `qa.tester@example.com` + password
+  `Ex4mpleP4ss!` (verificado char por char con MOSTRAR antes de enviar) ->
   `login_success` real, mismo IM histórico
   `30f41b94-1310-46e1-8627-fb31590ffef3`, `login_status:"connected"`, Home
   pasa a mostrar shelf "Continuar viendo" e ícono de cuenta en sidebar.
@@ -4220,7 +4220,7 @@ llegó a empezar. Session quedó logueada con la cuenta real al cerrar.
 
 Device 192.168.1.54 (Roku Express), build "TV Azteca En Vivo"
 v1.24.92609040 (sin cambios en toda la corrida). Cuenta de prueba
-jmatevargas@poligran.edu.co (password real Winner2025; IM
+qa.tester@example.com (password real Ex4mpleP4ss!; IM
 30f41b94-1310-46e1-8627-fb31590ffef3). Grabación de cámara real por caso
 (camera-server.js corriendo con teléfono conectado). Telnet de consola en
 :8085 (solo 1 cliente a la vez — cerrar entre escenarios).
@@ -4233,7 +4233,7 @@ jmatevargas@poligran.edu.co (password real Winner2025; IM
   logout real desde AccountPage, luego el hero live "A Quien Corresponda"
   reprodujo deslogueado (media-player state=play, login_status anonymous).
 - **AC-REG-01** (registro nuevo): PASA. Email inventado
-  qa-test-2026-09-18-01@poligran.edu.co + password válida QaTest2026 ->
+  qa-test-2026-09-18-01@example.com + password válida QaTest2026 ->
   "Verify with Code" (envía código, exige verificación, sin crash). Código
   inventado 000000 rechazado (OTP_CODE_INVALID). No se completó registro
   (sin acceso al email), no queda cuenta verificada creada.

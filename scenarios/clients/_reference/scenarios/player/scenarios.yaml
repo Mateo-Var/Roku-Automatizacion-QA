@@ -329,7 +329,7 @@
 - id: SC-CW-01
   status: >
     CONFIRMADO 2026-09-17 (continuación 6, device .63, login restaurado
-    -- ver PROJECT_MEMORY.md). Con la cuenta jmatevargas@poligran.edu.co
+    -- ver PROJECT_MEMORY.md). Con la cuenta qa.tester@example.com
     logueada, se reprodujo "Me trata como su gato | Programa del 16 de
     septiembre 2026" (Acércate a Rocío, duración 01:10:25) por ~8s reales
     (`VODStartComplete` confirmado), Back inmediato a ShowPage, vuelta a

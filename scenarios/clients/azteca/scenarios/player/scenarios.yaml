@@ -219,7 +219,7 @@
     manejo es un BUG, no una PaymentRequiredPage. El show "Exatlón México"
     (Top 10 #1 de Home) devuelve HTTP 403 en el endpoint de stream-data
     (`issuccess:false, reason:"Forbidden"`) tanto ANÓNIMO como logueado con
-    la cuenta de prueba jmatevargas@poligran.edu.co, en Programas completos
+    la cuenta de prueba qa.tester@example.com, en Programas completos
     y en Mejores momentos -- o sea, todo el show está gateado por
     entitlement/suscripción que la cuenta de prueba no tiene. PERO en vez
     de redirigir a PaymentRequiredPage (lo que este escenario espera), el
@@ -652,7 +652,7 @@
       `issuccess:false, reason:"Forbidden"` (HTTP 403) y el player se cierra.
       Verificado que NO es solo por estar deslogueado: dio 403 estando
       anónimo Y también tras loguear con la cuenta de prueba
-      jmatevargas@poligran.edu.co (login_success/connected confirmado) --
+      qa.tester@example.com (login_success/connected confirmado) --
       falló igual en Programas completos Y en Mejores momentos (4
       ocurrencias de Forbidden en total). Es decir, el show "Exatlón
       México" completo está gateado por entitlement/suscripción que esta
@@ -776,7 +776,7 @@
     bloqueante, no es este check).
 
     RE-CONFIRMADO 2026-09-18 (device 192.168.1.54, build v1.24.92609040,
-    sesión logueada con jmatevargas@poligran.edu.co):
+    sesión logueada con qa.tester@example.com):
     - Check 1 (ráfaga "Ver ahora", PRIORIDAD ALTA): NO SE REPRODUJO en
       6/6 intentos en 2 shows distintos -- 3 ráfagas de 5 Select rápidos
       (150ms) sobre VER AHORA de "Venga La Alegría" (3/3) y 3 sobre
