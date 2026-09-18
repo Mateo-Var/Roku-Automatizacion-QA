@@ -1,0 +1,53 @@
+# Escenarios compartidos (Core) — Performance: navegación (arranque, scroll, fichas, menú)
+#
+# Ver scenarios/shared/README.md para la convención de `area`/`severity`/`status`.
+#
+# A diferencia del resto de scenarios/shared/, este archivo no documenta un
+# flujo funcional paso a paso para un humano/agente -- es una guía de uso de
+# una herramienta de medición: scripts/test-nav-perf.ps1. No hay "pasos
+# manuales equivalentes" razonables para medir fps/CPU/memoria/nodos
+# SceneGraph con precisión; esto siempre fue pensado para correrse con el
+# script, contra el reloj y las métricas del propio Roku (ver
+# scripts/RokuTest.psm1).
+#
+# Por qué importa: fugas de memoria/nodos y regresiones de fps/CPU no se
+# notan en una sesión corta de exploración manual -- se acumulan en varios
+# ciclos (abrir/cerrar fichas, scroll largo) y solo se detectan comparando
+# contra un budget o una corrida anterior (-Baseline).
+
+- id: SC-PERF-NAV-01
+  title: "Rendimiento de navegación: arranque, scroll, fichas (fugas) y menú"
+  area: [core-ui, core-network]
+  severity: major
+  screen: HomePage, ShowPage, menú lateral
+  status: >
+    Sin correr todavía contra el device real (script recién integrado
+    2026-09-17). Pendiente la primera corrida para tener un -Baseline de
+    referencia y, con esos datos, ajustar los budgets iniciales de
+    test-data/azteca.json (ver el comentario `budgets._comment` ahí).
+
+  que_mide:
+    - "launch: N arranques en frío (-LaunchRuns). appLaunchCompleteMs (beacon del sistema), homeShownMs (hasta que se ve el Home) y homeSettledMs (hasta que la consola se calla, lo que el usuario percibe como 'cargó'). Al final: memoria, texturas y nodos SceneGraph con el Home cargado, y filas duplicadas."
+    - "scroll: baja N filas a ritmo humano y sube todo a ritmo rápido, más una fila a lo ancho. Mide fps (query/graphics-frame-rate) y CPU (query/chanperf) durante la navegación, y TECLAS PERDIDAS (fila enfocada real vs. esperada leída del árbol de UI)."
+    - "show: entra a una fila del catálogo (navigation.showRow) y hace N ciclos OK -> ficha -> Back. Por ciclo mide latencia de apertura/carga/back, y la PENDIENTE de nodos SceneGraph y memoria por ciclo -- una ficha cerrada tiene que liberar lo que creó; una pendiente positiva sostenida es una fuga."
+    - "menu: por cada ítem de navigation.menu (Secciones/En vivo/Favoritos/Buscar), mide tiempo hasta que la página se muestra y termina de cargar, con los fps del momento."
+
+  como_usar:
+    - "pwsh scripts/test-nav-perf.ps1 -RokuHost 192.168.1.186                              # los 4 pasos completos"
+    - "pwsh scripts/test-nav-perf.ps1 -RokuHost 192.168.1.186 -Steps show -Cycles 10        # solo fugas de memoria/nodos, con más ciclos para una pendiente más confiable"
+    - "pwsh scripts/test-nav-perf.ps1 -RokuHost 192.168.1.186 -Baseline test-runs/test-nav-perf-<corrida-anterior>.json   # detecta regresiones > -RegressionPct (default 20%) contra una corrida de referencia"
+    - "El reporte JSON de cada corrida (test-runs/test-nav-perf-*.json) sirve como -Baseline de la corrida siguiente: guardar el de un build sano conocido para comparar builds futuros."
+
+  veredicto:
+    - "FAIL: crash, teclas perdidas a ritmo humano, filas duplicadas en el Home, Back que no vuelve, o fichas cerradas que se acumulan en el árbol."
+    - "LENTO: algún budget de test-data/azteca.json excedido, o regresión > -RegressionPct contra -Baseline."
+    - "INVALIDO: red degradada durante la medición, o no se pudo llegar a una pantalla (fila o ítem de menú inexistente en el catálogo/Home actual)."
+    - "PASS: todo lo demás."
+
+  logs_watch:
+    - "Ver scripts/RokuTest.psm1: los tiempos se miden con el reloj del propio Roku (no el de la PC), y cada llamada ECP registra su RTT para detectar red degradada -- un resultado medido sobre WiFi roto sale INVALIDO en vez de publicar números inflados."
+
+  visual_check: >
+    No requiere capturas de pantalla -- toda la evidencia es el log de
+    consola (test-runs/*.log) y el reporte JSON con métricas, budgets y,
+    si se pasó -Baseline, el detalle de regresiones.

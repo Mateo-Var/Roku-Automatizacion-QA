@@ -1,0 +1,796 @@
+# Escenarios compartidos (Core) — Player: reproducción, controles, ads, paywall
+#
+# ===========================================================================
+# CORRIDA PARCIAL 2026-09-18 17:58-18:03 UTC — device 192.168.1.54, build
+# v1.24.92609040, sesión logueada. Evidencia:
+# reports/azteca/2026-09-18_18-00-player/{logs,screenshots,videos}/.
+# Contenido usado: "Venga La Alegría | Programa 17 de septiembre 2026 Parte 1"
+# (video_id 6aac4cbf526ae817c0d669af, VOD, duración 01:11:51).
+#
+#   SC-PLAYER-BUG-01      NO REPRODUCIDO en esta pasada. Se ejercitó el
+#     disparador exacto del bug (selección MANUAL de un episodio desde el
+#     grid de la ShowPage, no "Ver ahora") y el player abrió limpio:
+#     `player_ready` + `player_loaded`, sin ParseJSON crash ni excepción
+#     BrightScript. Como el escenario lo documenta como CONDICIÓN DE CARRERA,
+#     una sola pasada limpia NO alcanza para darlo por resuelto -- mantener
+#     abierto y reintentar con más repeticiones y en frío.
+#   SC-FLOW-CONTROLS-01   PASA los sub-casos ejercitados, verificado por
+#     `query/media-player` (telemetría del device, no por captura):
+#       - carga: state=play, error=false, HLS, container=hls,
+#         video=mpeg4_10b, audio=aac_adts, captions=webvtt, drm=none,
+#         bandwidth ~12.5 Mbps, buffering current=1000/max=1000.
+#       - pausa/resume: Play -> state="pause" (pos 59200ms) -> Play ->
+#         state="play" (pos 63200ms). Correcto.
+#       - seek adelante: Fwd x3 + Select -> 63s a 781s. Correcto.
+#       - seek atrás: Rev x2 + Select -> 781s a 562s. Correcto.
+#       - subtítulos: webvtt activos y avanzando en sincronía.
+#       - spam: 45 pulsaciones seguidas sin delay (15x Fwd+Rev+Play
+#         intercalados) -> el player sobrevive, state="play" error="false",
+#         posición coherente (715s), SIN crash ni excepción BrightScript.
+#     Sub-casos NO ejercitados: extremos del contenido (seek al final /
+#     Up Next), cambio de pista de subtítulos, foco de los controles.
+#   SC-FLOW-EXIT-NAV-01   PARCIAL. Back desde el player vuelve limpio a la
+#     ShowPage (screen_name "Show"), sin banner de confirmación para VOD y
+#     sin dejar el player colgado. No se probó el Home físico ni el caso live.
+#   SC-FLOW-ADS-01        HALLAZGO (a investigar). Durante la reproducción
+#     aparecieron repetidos `MediaStreamPlayerAnalytics : getAdEventPayload :
+#     ad_error:` -- al menos 4 en ~5 minutos, uno al arrancar el contenido y
+#     otros tras los seeks. El contenido nunca se interrumpió ni mostró ads,
+#     así que el error está manejado, pero sugiere que la monetización no
+#     está entregando (o que la config de ads del entorno de dev está rota).
+#     Vale confirmarlo con el equipo de Ads antes de reportarlo como bug.
+#   SC-SHOW-01            Cubierto de hecho: detalle de show + reproducción
+#     funcionan de punta a punta (ver navegacion/shows para el detalle de la
+#     ShowPage).
+#
+# ADVERTENCIA METODOLÓGICA (importante para futuras corridas del player):
+# el endpoint plugin_inspect captura SOLO el plano gráfico de Roku, no el de
+# video. Durante la reproducción las capturas salen COMPLETAMENTE NEGRAS
+# aunque query/media-player reporte state="play" error="false" y la posición
+# avance -- lo único que se ve son los subtítulos, porque se dibujan en el
+# plano gráfico. NO reportar eso como "pantalla negra" / bug de render. Para
+# el player la evidencia válida es el video de la cámara + query/media-player.
+# ===========================================================================
+#
+# Ver scenarios/shared/README.md para la convención de `area`/`severity`/`status`.
+#
+# REORGANIZACIÓN 2026-09-17 (consolidación en flows, pedido explícito del
+# usuario): la mayoría de los casos de control de reproducción (VI-PC/VI-SY/
+# CO-US adaptados) pedían cada uno su propia sesión de reproducción separada
+# (lanzar, entrar al show, reproducir) solo para probar UNA cosa puntual del
+# remoto -- mucho overhead de entrada/salida repetido para validar cosas que
+# conviven bien en una sola sesión continua. Se agruparon en "FLOW"s: un
+# único escenario con una checklist numerada en orden, todos verificables
+# dentro de UNA MISMA reproducción. Los IDs viejos (SC-PLAYER-SEEK-01, etc.)
+# quedan referenciados entre paréntesis dentro de cada paso de checklist
+# para que sigan siendo buscables por quien tenga el ID viejo anotado en
+# algún reporte anterior -- no se perdió ningún caso, solo se agruparon.
+# De ~13 sesiones de "controles básicos" quedó 1 (SC-FLOW-CONTROLS-01), de 3
+# de "ads" quedó 1 (SC-FLOW-ADS-01), de 2 de "salida/navegación" quedó 1
+# (SC-FLOW-EXIT-NAV-01), y de 3 de "estrés de interacción rápida" quedó 1
+# (SC-FLOW-STRESS-01, que incluye lo que antes era SC-VERAHORA-RAPID-CRASH-01
+# -- OJO, ese ID viejo se cita por nombre en varios reportes/PROJECT_MEMORY.md,
+# quedó documentado como sub-caso del flow, no se borró el contenido).
+# NO se tocó el grupo Up Next (SC-UPNEXT-*, cada uno necesita llegar al fin
+# de un episodio distinto, no son fusionables en una sola reproducción) ni
+# Continue Watching (SC-CW-*, son sobre navegación Home/reentrada) ni los
+# casos con precondición propia (SC-SHOW-01, SC-PAYWALL-01, SC-PLAYER-BUG-01,
+# SC-PLAYER-CONTENT-MATRIX-01, SC-PLAYER-VOLUME-01).
+#
+# AUTOMATIZACIÓN DISPONIBLE (2026-09-17): scripts/test-vod-playback.ps1 y
+# scripts/test-live-playback.ps1 reproducen contenido del catálogo
+# (test-data/azteca.json) y assertean, contra el device real, arranque,
+# pausa/resume/seek (VOD) o el contrato "sin trickplay" (live), analytics
+# GA4 + heartbeats de Mediastream, y cierre limpio con Back. Complementan la
+# exploración manual de este archivo, no la reemplazan: automatizan la
+# regresión repetible de lo que ya se documentó acá a mano. Correr con:
+#   pwsh scripts/test-vod-playback.ps1 -RokuHost 192.168.1.186
+#   pwsh scripts/test-live-playback.ps1 -RokuHost 192.168.1.186
+# Para la regresión de OK repetido sobre el botón de reproducir, ver la nota
+# junto a SC-FLOW-STRESS-01 más abajo (scripts/test-player-multipress.ps1,
+# chequeo OBLIGATORIO en toda corrida de esta batería). Pendiente: primera
+# corrida real de test-vod-playback.ps1/test-live-playback.ps1 post-integración.
+# Estado (2026-09-17, continuación 3): SC-FLOW-CONTROLS-01 (14/14) y
+# SC-FLOW-STRESS-01 (3/3) quedaron COMPLETOS. Pendientes reales:
+# SC-FLOW-EXIT-NAV-01, SC-FLOW-ADS-01, SC-PLAYER-CONTENT-MATRIX-01, los 4
+# SC-UPNEXT-*, los 5 SC-CW-*.
+# Estado (2026-09-15): SC-SHOW-01 validado en sesiones del 2026-09-11
+# (navegación + play/pause/seek estables, ver PROJECT_MEMORY.md).
+# SC-PLAYER-BUG-01 es un BUG CONFIRMADO (condición de carrera, ver detalle
+# completo abajo) -- pendiente de reportar. SC-PAYWALL-01 y SC-ADS-01 (ahora
+# parte de SC-FLOW-ADS-01) sin correr formalmente todavía. Ver también el
+# hallazgo de AC-UL-04 (grupo login-registro): no se encontró contenido que
+# gatee por login, relevante para pensar SC-PAYWALL-01 (¿gatea por
+# suscripción tampoco?).
+# scripts/smart-seek-agent.js -- herramienta ya validada para avanzar
+# contenido de forma controlada hasta cerca del final, útil para varios
+# escenarios de este grupo.
+#
+# Ampliación 2026-09-16: batería formal de controles de reproducción,
+# adaptada de una plantilla de certificación genérica de Smart TV
+# (prefijos VI-PC/VI-SO/VI-SY/CO-US) a los controles reales del remoto de
+# Roku. Notas de adaptación de plataforma:
+#   - Roku NO tiene teclas de volumen/silencio a nivel de canal -- eso lo
+#     maneja el TV/soundbar por HDMI-CEC, no la app. VI-SO-01/02 quedan
+#     documentados como N/A de plataforma, no como "no probado".
+#   - No existe "barra de ayuda" ni tecla de búsqueda física de hardware
+#     como en Samsung Smart Hub -- CO-US-03 y la parte de "tecla de
+#     búsqueda" de CO-US-01 son N/A, se adaptaron al resto de la app.
+#   - "Tecla de salida" de Samsung -> en Roku es la tecla Home física
+#     (sale siempre al launcher del sistema) + el banner de confirmación
+#     real de Azteca ya encontrado en la exploración de navegación
+#     ("¿Estás seguro de que quieres salir? No/Sí") que aparece con Back
+#     desde Home.
+#   - Foco por defecto del skin del player: confirmar que arranca en
+#     Play/Pause (pedido explícito del usuario, ver check 1 de
+#     SC-FLOW-CONTROLS-01).
+#
+# Matriz de contenido pedida explícitamente por el usuario -- aplicar en
+# los escenarios marcados con [MATRIZ]: probar con (a) contenido de Top 10,
+# (b) contenido nuevo/reciente, (c) contenido antiguo/viejo, (d) un canal
+# Live -- entrando tanto desde la guía EPG como desde el hero/riel actual
+# de Home. No hace falta correr TODOS los escenarios con las 8
+# combinaciones -- priorizar los marcados [MATRIZ] para esto, el resto usa
+# cualquier contenido representativo.
+#
+# scripts/roku-type.js NO aplica acá (no hay texto que tipear en el
+# player) -- pero SÍ aplica la misma disciplina de "log primero, captura
+# donde hace falta ver algo" ya validada en las otras baterías.
+
+- id: SC-SHOW-01
+  title: Detalle de show y reproducción
+  area: [player, core-network, core-ui]
+  severity: blocker
+  screen: ShowPage -> EpisodeDetailPage -> Player
+  steps:
+    - Lanzar el canal desde cero (cold start)
+    - Entrar al show enfocado en Home
+    - Bajar en la lista
+    - Bajar en la lista otra vez
+    - Moverse a la derecha
+    - Seleccionar episodio
+    - Pausar con Play
+    - Reanudar con Play
+  expected:
+    - Video arranca sin buffering excesivo
+    - Controles responden (play/pause/seek)
+  logs_watch:
+    - Sin errores del Player embebido (buffering infinito, DRM fail)
+    - roUrlTransfer del manifest/licencia resuelve OK
+  visual_check: screenshot del player en reproducción (validar que no haya pantalla negra/verde)
+  status: >
+    CONFIRMADO 2026-09-17 contra device .63 (batería PLAYER formal). Cold
+    start real confirmado (HomePage:Init fresco, login_status:connected,
+    mismo IM 30f41b94...). Entró al show "Acércate a Rocío" desde Home
+    (Down x2 + Right + Select), Down x2 + Right + Select adicional entró a
+    la categoría de episodios y seleccionó uno. episode/<ID>.json llegó con
+    ID poblado (SC-PLAYER-BUG-01 NO se reprodujo esta corrida). Solo 1
+    transición buffering->playing (VODStartComplete 3925ms), sin DRM fail
+    ni errores del Player embebido. Play pausó (RAFPlayerTask: state =
+    paused) y Play de nuevo reanudó (state = playing) sin problema.
+    Hallazgo incidental (no nuevo): al navegar Right desde el hero se
+    presionó Select sobre el ícono de favorito en vez de la lista de
+    episodios, reproduciendo una vez más el bug ya conocido
+    ShowPage.brs(1086) (roSGNode.AddReplace Type mismatch) -- no afecta el
+    veredicto de este escenario, ya está documentado aparte. Evidencia:
+    reports/azteca/player/CORRIDA-device63-20260917/telnet.log (líneas
+    1-420 aprox.), 01-show-navigate-focus.jpg, 02-showpage-after-select.jpg,
+    03-player-playing.jpg.
+
+    RE-CONFIRMADO (2026-09-18, device 192.168.1.54, build v1.24.92609040) --
+    PASA. Cold start real (Home + launch/dev). Desde Home, Down x2 llegó al
+    riel "MicroDramas" con el show "Historias de Vida" (PROGRAMA DE
+    TELEVISIÓN) -> Select -> ShowPage ("HISTORIAS DE VIDA.", "2
+    TEMPORADAS", Episodios T2/T1). Reproducción vía VER AHORA (hero):
+    query/media-player = state="play", error="false", is_live=false (VOD),
+    container=hls, duration ~1232s (~20min), bitrate ~1.77 Mbps, position
+    avanzando, drm="none" -- sin buffering excesivo ni DRM fail. Pausa/
+    reanudar confirmado por ECP: Play -> state="pause", Play -> state="play".
+    0 excepciones BrightScript (Backtrace/Unhandled/ERROR) en el log.
+    Nota de navegación (no bug): al intentar entrar por la lista de
+    episodios (Down+Right+Select) el foco cae primero en la pestaña "Acerca
+    de este contenido"; se usó VER AHORA para reproducir. Evidencia:
+    reports/azteca/2026-09-18_18-00-player/{logs/SC-SHOW-01.log,videos/SC-SHOW-01.mp4,screenshots/SC-SHOW-01-01..03-*.jpg}
+
+- id: SC-PAYWALL-01
+  title: Contenido restringido por suscripción
+  area: [core-network, core-ui]
+  severity: major
+  screen: PaymentRequiredPage
+  steps:
+    - Intentar reproducir contenido premium sin suscripción activa
+  expected:
+    - Redirige/muestra PaymentRequiredPage, nunca reproduce el contenido
+  logs_watch:
+    - '"purchased" tratado como entero (1), nunca como boolean (regla del Core)'
+  status: >
+    SIN CONFIRMAR, mismo estado que sesiones previas (2026-09-17, batería
+    device .63). Se revisó test-data/azteca.json (sin ningún contenido
+    marcado como premium/paywalled) y se recorrió Home brevemente sin
+    encontrar ningún badge de candado/suscripción. Consistente con el
+    hallazgo ya documentado (AC-UL-04, PROJECT_MEMORY.md): no se ha
+    encontrado ningún contenido del catálogo de Azteca que gatee por
+    suscripción en esta cuenta de prueba. No se puede ejecutar el escenario
+    tal como está redactado sin identificar primero un ítem realmente
+    restringido -- queda abierto, no es un "PASA" fabricado.
+
+    ACTUALIZACIÓN IMPORTANTE 2026-09-18 (device 192.168.1.54, build
+    v1.24.92609040) -- POR FIN SE IDENTIFICÓ CONTENIDO RESTRINGIDO, pero el
+    manejo es un BUG, no una PaymentRequiredPage. El show "Exatlón México"
+    (Top 10 #1 de Home) devuelve HTTP 403 en el endpoint de stream-data
+    (`issuccess:false, reason:"Forbidden"`) tanto ANÓNIMO como logueado con
+    la cuenta de prueba jmatevargas@poligran.edu.co, en Programas completos
+    y en Mejores momentos -- o sea, todo el show está gateado por
+    entitlement/suscripción que la cuenta de prueba no tiene. PERO en vez
+    de redirigir a PaymentRequiredPage (lo que este escenario espera), el
+    SDK del player hace `ParseJSON` del string "Forbidden" y lanza
+    `BRIGHTSCRIPT: ERROR: ParseJSON: Unknown identifier 'Forbidden':
+    mediastreamrokuplayersdk:/source/apis/MediaStreamPlayerAPI.brs(68)`,
+    luego `closePlayer` SILENCIOSO (vuelve a la ShowPage sin ningún
+    mensaje). Es decir: el expected de este escenario ("Redirige/muestra
+    PaymentRequiredPage, nunca reproduce") se cumple a medias -- NUNCA
+    reproduce (bien) pero NO muestra PaymentRequiredPage ni ningún aviso
+    (mal). FALLA la parte de UX/expected + expone el bug de ParseJSON.
+    Detalle completo y evidencia en SC-PLAYER-CONTENT-MATRIX-01 (Case A) y
+    reports/azteca/2026-09-18_18-00-player/{logs/SC-PLAYER-CONTENT-MATRIX-01.log,screenshots/SC-MATRIX-01-04..11-*.jpg}.
+    Reportar al equipo de Core/Player junto con el resto de hallazgos.
+
+- id: SC-PLAYER-BUG-01
+  title: "[BUG confirmado, condición de carrera] ParseJSON crash al entrar al Player por selección manual de episodio"
+  area: [player, core-network]
+  severity: major
+  screen: Player, al entrar desde ShowsPage/SeasonListView
+  found_on: 2026-09-11 (observación manual + confirmado con prueba dirigida, next-episode-test.log)
+  root_cause_confirmed: >
+    ACTUALIZADO tras 2 sesiones de prueba (8 transiciones de episodio en
+    total): NO es 100% determinístico por el método de selección -- es una
+    condición de carrera. Datos acumulados: selección manual
+    (SeasonListView + OK) 2 de 3 veces con bug; "Up Next" (con OK explícito
+    o autoplay por timeout, sin tecla) 0 de 5 veces con bug. El patrón que
+    SÍ se sostiene: el bug NUNCA apareció en ninguna variante de "Up Next",
+    solo puede aparecer en selección manual (pero no siempre). Hipótesis
+    sin cambios: al entrar por Up Next, el Player ya trae el ID del
+    próximo episodio resuelto (campo "next" del JSON del episodio
+    anterior) de forma síncrona; al entrar por selección manual, hay una
+    carrera entre el registro de métricas de ads
+    (postRequest .../metrics.mdstrm.com/inbound/v1/event/register/) y la
+    asignación de esa variable de ID -- que a veces gana la carrera (sin
+    bug) y a veces no (bug). Necesita más muestras para estimar el % real
+    de reproducción en selección manual.
+  steps:
+    - Desde ShowsPage, entrar a una temporada (SeasonListView)
+    - Seleccionar CUALQUIER episodio con OK (no usar Up Next)
+  expected:
+    - "BaseRequests : getRequest url : https://mdstrm.com/episode/<ID>.json (con ID poblado)"
+  actually_observed:
+    - "postRequest .../metrics.mdstrm.com/inbound/v1/event/register/"
+    - "BaseRequests : getRequest url : https://mdstrm.com/episode/.json (ID vacío)"
+    - "HTTP 404 'Not found' (texto plano, no JSON)"
+    - "BRIGHTSCRIPT: ERROR: ParseJSON: Unknown identifier 'Not found': mediastreamrokuplayersdk:/source/apis/MediaStreamPlayerAPI.brs(67)"
+  logs_watch:
+    - Buscar exactamente el patrón "episode/.json" (ID vacío entre / y .json)
+    - Buscar "ParseJSON: Unknown identifier" en cualquier .brs del Player SDK
+  control_case:
+    - Transición por "Up Next" (autoplay), 3/3 veces sin este error -- usar
+      como caso de control al reportar el bug (aísla que el problema es del
+      path de selección manual, no del Player en general).
+  regression_note: >
+    A pesar del error, la reproducción continúa (no crashea la app) --
+    severidad "major" y no "blocker" por eso, pero es un error no manejado
+    que viola el patrón "errors are values, not exceptions" que exige
+    Library/source/apis en el Core.
+  status: >
+    RE-CONFIRMADO consistente con la naturaleza intermitente ya documentada
+    (2026-09-17, device .63). 3 selecciones manuales de episodio distintas
+    en esta corrida (Acércate a Rocío, Venga La Alegría x2) -- las 3 con
+    `episode/<ID>.json` con ID poblado, SIN reproducir el bug esta vez
+    (0/3). No contradice el hallazgo previo (condición de carrera, no
+    determinística, ~2/3 en muestra acumulada anterior de 8 transiciones)
+    -- simplemente esta muestra salió del lado "sin bug". Evidencia:
+    reports/azteca/player/CORRIDA-device63-20260917/telnet.log líneas
+    ~550-970.
+
+# RELACIÓN CON scripts/test-player-multipress.ps1 (NO es el mismo caso, no
+# fusionar): el check "Ver ahora" de SC-FLOW-STRESS-01 de abajo (antes
+# SC-VERAHORA-RAPID-CRASH-01) es el botón "Ver ahora" del hero de ShowPage
+# específicamente, reportado por el usuario 2026-09-16 y todavía sin
+# confirmar por el agente. test-player-multipress.ps1 es un test de
+# REGRESIÓN AUTOMATIZADO y PERMANENTE de un abuso relacionado pero distinto
+# -- OK repetido en general (no acotado al botón del hero) -- sobre 2 bugs
+# YA CONFIRMADOS y documentados en build azteca v1.18.92608240 (2026-09-04):
+# Bug A (N OK rápidos crean N instancias de MediaStreamPlayer, puede colgar
+# la app en el Micro Debugger) y Bug B (tras el abuso, el id de contenido se
+# pierde y nada reproduce hasta reiniciar la app). Ambos bugs son de
+# "abusar del botón de reproducir", pero uno es el hero de ShowPage (este
+# escenario) y el otro es el flujo general de reproducir (ese script).
+# OBLIGATORIO: test-player-multipress.ps1 se corre SIEMPRE en cada pasada de
+# la batería de player, sin excepción y sin degradar su prioridad aunque se
+# parezca conceptualmente al check de "Ver ahora" -- es la única forma de
+# detectar si el bug ya arreglado vuelve a aparecer en un build nuevo.
+#   pwsh scripts/test-player-multipress.ps1 -RokuHost 192.168.1.186
+#   pwsh scripts/test-player-multipress.ps1 -Test A -OkCount 3 -OkIntervalMs 150
+# Ver el propio script para el detalle completo de los 2 bugs y por qué son
+# 2 tests separados en vez de uno.
+
+- id: SC-FLOW-CONTROLS-01
+  title: "[FLOW -- consolida 13 casos ex VI-PC/VI-SY/CO-US en una sola reproducción] Controles básicos del player: foco, carga, seek, pausa, subtítulos, remoto, spam, extremos"
+  area: [player, core-ui]
+  severity: major
+  screen: Player (una sola sesión continua de reproducción)
+  steps:
+    - "1. Foco por defecto (ex SC-PLAYER-DEFAULT-FOCUS-01): entrar a reproducir cualquier contenido, y en cuanto aparezcan los controles del skin (sin tocar nada todavía), confirmar visualmente cuál botón tiene el foco"
+    - "2. Controles durante la carga (ex SC-PLAYER-CONTROLS-LOADING-01, VI-PC-01): mientras el video todavía está cargando/con el spinner visible, presionar Play/Pause, luego Fwd, luego Rev, luego Back -- cada uno por separado, confirmando que la app no se congela y que Back cancela la carga y vuelve"
+    - "3. Seek básico (ex SC-PLAYER-SEEK-01, VI-PC-02): con el video reproduciendo normal, Fwd una vez, confirmar UI de scrub (filmstrip), confirmar con Select, repetir con Rev -- confirmar ritmo razonable de avance/retroceso (tabla x1/x2/x3/x5 ya documentada) y que no hay buffering excesivo ni reinicio no solicitado"
+    - "4. Multi-click en seek (ex SC-PLAYER-SEEK-MULTICLICK-01, VI-PC-03): Fwd 8-10 veces seguidas rápido sin pausar, observar resultado; repetir con Rev -- sin freeze, sin crash, sin buffering infinito"
+    - "5. Pausar durante el scrub (ex SC-PLAYER-PAUSE-DURING-SEEK-01, VI-PC-04): Fwd para entrar en modo scrub sin confirmar, presionar Play/Pause y documentar qué pasa; repetir con Back en medio del scrub"
+    - "6. Pause vs Stop (ex SC-PLAYER-STOP-PAUSE-01, VI-PC-05): Play/Pause confirma que SOLO pausa (no cierra el player), Play/Pause de nuevo reanuda sin buffering largo, Back sale del player limpio y rápido a la pantalla de origen (ShowPage, no Home a ciegas)"
+    - "7. Controles no se bloquean entre sí (ex SC-PLAYER-CONTROL-STATE-01, VI-PC-06): Play/Pause y, sin esperar la transición visual, Fwd inmediatamente después -- confirmar que Fwd responde igual, sin quedar 'trabado'"
+    - "8. AV sync (ex SC-PLAYER-AVSYNC-01, VI-SY-01): reproducir varios minutos prestando atención a sync audio/video, hacer un par de seeks y confirmar que el audio sigue sincronizado después (caso mayormente observacional, dejar nota de confiabilidad de la validación)"
+    - "9. Subtítulos sincronizados (ex SC-PLAYER-SUBTITLES-SYNC-01, VI-SY-02): con subtítulos activos, confirmar con capturas en distintos momentos que el texto corresponde al momento real del video"
+    - "10. Subtítulos pausan con el video (ex SC-PLAYER-SUBTITLES-PAUSE-01, VI-SY-03): pausar con texto en pantalla, confirmar que el subtítulo queda fijo, reanudar y confirmar que sigue sincronizado"
+    - "11. Todas las teclas del remoto (ex SC-REMOTE-KEYS-01, CO-US-01): probar Home/Back/Select/direccionales/Play/Fwd/Rev durante reproducción, sin parpadeo; específicamente avanzar/retroceder EN PAUSA no debe generar doble foco visual; teclas no usadas no deben crashear ni navegar raro"
+    - "12. Remoto durante buffering (ex SC-REMOTE-DURING-BUFFER-01, CO-US-02): forzar buffering real (seek grande a zona no precargada), presionar Back con el spinner visible -- confirmar que vuelve limpio sin indicador fantasma en la siguiente pantalla; repetir con Stop si el skin lo expone"
+    - "13. Spam de Play/Pause (ex SC-PLAYER-TOGGLE-SPAM-01): 8-10 toques seguidos rápido, esperar a que se estabilice, confirmar que el ícono visual (play/pause) coincide con el estado real del audio/video"
+    - "14. Seek a los extremos (ex SC-PLAYER-SEEK-EXTREMES-01): con el video avanzado varios minutos, Rev en ráfaga hasta 0:00 (confirmar que se detiene sin error, no vuelve a Home), luego desde 0:00 Fwd en ráfaga intentando pasarse del final real (confirmar transición limpia a Up Next/finished, no cuelgue)"
+  expected:
+    - Cada uno de los 14 checks pasa según lo descrito en su propio punto -- documentar el resultado de CADA uno por separado en el reporte final, no solo un veredicto global del flow
+  logs_watch:
+    - Sin excepciones BrightScript no manejadas en ningún punto del flow
+    - "`RAFPlayerTask: state = playing/paused` coherente con cada acción de pausa/reanudación (checks 6 y 13)"
+    - Confirmar cambio de `position:` real en el log tras cada seek confirmado (check 3)
+    - Transición limpia a `finished`/`stopped` en el extremo final (check 14)
+  visual_check: >
+    una captura por cada uno de los 14 checks (ver el punto específico de
+    cada uno para qué debe mostrar) -- no hace falta grabar video completo
+    de los 14, pero si se graba, un solo video de esta sesión sirve como
+    evidencia consolidada de todos los checks
+  status: >
+    PARCIAL (2026-09-17, device .63, misma sesión continua de reproducción
+    de "Venga La Alegría"). Checks CONFIRMADOS con evidencia real: (1) foco
+    por defecto es el ícono Play/Pause central del skin (captura
+    06-flow-controls-check1-focus.jpg); (3) Fwd confirma seek con Select,
+    `position` cambia en el log (26000) y retoma `playing` tras buffering
+    breve; (4) 8 Fwd en ráfaga sin pausar -- el estado pasó brevemente a
+    `stopped` y se recuperó solo a `buffering`->`playing` sin excepción
+    BRIGHTSCRIPT, sin crash (comportamiento aceptable, no ideal -- ver nota
+    abajo); (5) Play durante scrub confirma el seek y reanuda reproducción
+    (no actúa como pausa neutra, sino que confirma+play); (6) Play
+    SOLO pausa/reanuda (nunca cierra el player), Back cierra limpio a
+    ShowPage (origen), no a Home; (7) Play + Fwd inmediato, ambos
+    `onKeyEvent` se registran y procesan (Fwd no queda "trabado" esperando
+    la transición de Play); (9) subtítulos confirmados renderizando texto
+    real sincronizado con el audio (capturas 08 y 09); (10) pausa con
+    subtítulo en pantalla confirmada en el log
+    (`RAFPlayerTask: state = paused`) y por captura
+    (09-check10-subtitle-paused-a.jpg, texto congelado en "y, este, ahí se
+    va a notar un..."); (13) 8 toques de Play/Pause en ráfaga (200ms entre
+    cada uno) alternan limpio playing/paused sin excepción ni
+    desincronización, ícono final coincide con estado real.
+    NO CUBIERTOS esta sesión (falta de tiempo, no bloqueo real): check 2
+    (controles durante spinner de carga inicial), check 8 (AV sync
+    prolongado, es observacional), check 11 (barrido completo de TODAS las
+    teclas del remoto), check 12 (remoto durante buffering forzado por seek
+    grande a zona no precargada), check 14 (seek a los extremos 0:00 y
+    fin). Quedan PENDIENTES para la próxima sesión, no fallidos.
+    Nota menor: en el check 4 (multi-Fwd) se observó una transición a
+    `stopped` momentánea antes de recuperarse -- no bloqueante, pero vale
+    la pena vigilar si se repite con más muestras (posible indicio de
+    fragilidad bajo ráfaga de seeks, sin llegar a ser un bug confirmado).
+    Evidencia completa en
+    reports/azteca/player/CORRIDA-device63-20260917/telnet.log (líneas
+    ~1000-1700) y capturas 06 a 09.
+
+    **ACTUALIZACIÓN 2026-09-17 (continuación 3): los 5 checks restantes
+    completados, FLOW COMPLETO (14/14).** Sesión continua sobre "Lotería
+    del Crimen" (episodios 2 y 3, Temporada 1). Evidencia:
+    reports/azteca/player/CORRIDA-device63-20260917/telnet.log (líneas
+    ~7300-8600 aprox.), capturas 28 a 33.
+    - **Check 2 (controles durante carga inicial):** al entrar a un
+      episodio, se enviaron Play, Fwd, Rev y Back en sucesión rápida
+      (100ms) mientras el SDK todavía inicializaba (log mostraba tareas de
+      config del SDK sin terminar). Back canceló la carga y volvió limpio a
+      ShowPage (`onStoppedVideoPlayer`, `screen_view screen_name:"Show"`),
+      sin BRIGHTSCRIPT nuevo, sin freeze. CONFIRMADO.
+    - **Check 8 (AV sync, observacional):** 2 capturas separadas ~90s
+      reales de diferencia durante reproducción normal de un episodio;
+      `query/media-player` confirmó que `position` avanzó de forma
+      consistente con el tiempo real transcurrido (24s -> 114s, ~90s de
+      diferencia real), y el subtítulo visible en la 2da captura
+      corresponde a diálogo distinto/posterior al de sentido narrativo
+      esperado. Nota de confiabilidad: esto NO prueba sync audio/video en
+      sí (las capturas de Roku nunca muestran el frame de video, política
+      ya documentada) -- es una validación indirecta de que la posición
+      reportada por el player avanza en tiempo real sin saltos ni
+      congelamientos, no una medición de lip-sync real. CONFIRMADO con esa
+      salvedad ya anotada en el propio check.
+    - **Check 11 (barrido de teclas del remoto):** durante reproducción
+      normal, se enviaron en secuencia Rev, Fwd, Play, Select, Up, Down,
+      Left, Right (600ms entre cada una) -- las 8 quedaron registradas en
+      el log (`onKeyEvent` con cada key respectiva, `press = true`/`false`
+      correctos), sin excepción BRIGHTSCRIPT nueva, `active-app` intacto al
+      final. El player quedó pausado tras la secuencia (una de las teclas
+      la pausó, esperado) y Play lo reanudó sin problema
+      (`state = buffering` -> `playing`). No se observó doble foco visual
+      ni comportamiento raro. CONFIRMADO.
+    - **Check 12 (remoto durante buffering forzado):** seek grande (5 Fwd
+      rápidos + confirmación con Select) a zona no precargada generó
+      `state = buffering` real; se presionó Back inmediatamente con el
+      spinner activo -- volvió limpio a ShowPage
+      (`SeasonListView : onKeyEvent : key = back`, `screen_view
+      screen_name:"Show"`), sin indicador fantasma en la captura posterior
+      (31-check12-back-during-buffer.jpg muestra la ShowPage limpia, foco
+      correcto en el tile de episodio). CONFIRMADO.
+    - **Check 14 (seek a los extremos):** con el video avanzado ~19min,
+      ráfaga de 20 Rev (150ms entre cada uno) llevó la posición a ~1s
+      (prácticamente 0:00) sin error, sin volver a Home, quedando en
+      `state = play` normal. Luego, desde ahí,
+      `scripts/smart-seek-agent.js` avanzó el resto del episodio en ráfaga
+      de Fwd hasta pasarse del final real -- transición limpia confirmada
+      por log (`finished` -> `stopped` -> nuevo episodio arrancando,
+      mismo patrón ya confirmado en SC-FLOW-STRESS-01 check 3), sin cuelgue
+      ni error. CONFIRMADO.
+    Con esto **los 14 checks de SC-FLOW-CONTROLS-01 quedan CONFIRMADOS**,
+    ninguno pendiente.
+
+- id: SC-PLAYER-VOLUME-01
+  title: "[VI-SO-01/02 -- N/A de plataforma, documentar el motivo] Roku no maneja volumen/silencio a nivel de canal"
+  area: [player]
+  severity: minor
+  screen: Player
+  steps:
+    - Confirmar (una sola vez, no hace falta repetir por contenido) que no existe una tecla de volumen/mute que la app deba manejar -- eso es responsabilidad del TV/soundbar vía HDMI-CEC en Roku, no del canal
+  expected:
+    - N/A -- documentar como confirmado que no aplica, no como "no probado"
+  logs_watch: []
+  visual_check: null
+  status: "N/A DE PLATAFORMA -- no requiere corrida contra el device, es una diferencia arquitectónica conocida de Roku vs. Smart TV con volumen a nivel de app."
+
+- id: SC-FLOW-EXIT-NAV-01
+  title: "[FLOW -- consolida 2 casos ex CO-US-04/05] Salida y navegación: Home físico, banner de confirmación, política de Back"
+  area: [core-ui]
+  severity: minor
+  screen: Player / Home (una sola sesión)
+  steps:
+    - "1. Salida por Home físico (ex SC-REMOTE-EXIT-01, CO-US-04): durante reproducción, presionar Home -- confirmar que sale de la app al launcher del sistema (comportamiento estándar de Roku, no evitable a nivel app)"
+    - "2. Banner de confirmación (ex SC-REMOTE-EXIT-01, CO-US-04): relanzar, ir a Home de la app, presionar Back -- confirmar el banner '¿Estás seguro de que quieres salir?' con foco en uno de los 2 botones por defecto, ambos seleccionables"
+    - "3. Back cierra popups primero (ex SC-REMOTE-BACK-01, CO-US-05): con un popup/diálogo abierto (ej. el mismo banner de salir), Back cierra el popup primero, no salta directo a otra pantalla"
+    - "4. Back retrocede página por página (ex SC-REMOTE-BACK-01, CO-US-05): en una pantalla interna (ej. ShowPage), Back vuelve un paso atrás en el historial, no a Home directo"
+    - "5. Back en Home dispara el banner (ex SC-REMOTE-BACK-01, CO-US-05): confirmar que no cierra la app directo sin avisar (mismo banner del check 2)"
+  expected:
+    - Los 5 checks se comportan según la política esperada de cada contexto, documentados por separado
+  logs_watch: []
+  visual_check: captura de cada uno de los 5 contextos (banner con foco visible, cada pantalla de origen tras Back)
+  status: >
+    CONFIRMADO 2026-09-17 (continuación 3, device .63). Los 5 checks
+    corridos en una sesión continua. Evidencia:
+    reports/azteca/player/CORRIDA-device63-20260917/telnet.log (líneas
+    ~9000-9300 aprox.), capturas 34 a 39.
+    - **Check 1** (Home físico durante reproducción): `query/active-app`
+      cambió de `id="dev"` a `id="562859"` (Roku Dynamic Menu) inmediato
+      tras Home -- sale al launcher del sistema, comportamiento estándar
+      confirmado.
+    - **Check 2** (banner de confirmación): relanzado el canal, en Home
+      (hero con foco), el PRIMER Back movió el foco a la barra lateral
+      ("Inicio" resaltado) -- NO mostró el banner todavía (matiz no
+      documentado antes: el primer Back desde el hero abre el nav lateral,
+      no dispara el banner directo). Un SEGUNDO Back desde ahí sí mostró
+      "¿Está seguro de que desea salir de la aplicación?" con foco por
+      defecto en "No" (captura 35-exitnav-banner2.jpg, botón "No" en
+      amarillo/resaltado, "Salir" en blanco sin foco). CONFIRMADO, con la
+      nota del paso intermedio documentada para no confundir a un futuro
+      agente.
+    - **Check 3** (Back cierra popup primero): con el banner abierto, Back
+      lo cerró (quedó en Home con el nav lateral abierto, foco en
+      "Inicio") -- NO saltó a otra pantalla ni cerró la app. CONFIRMADO.
+    - **Check 4** (Back retrocede página por página): desde una ShowPage
+      real (Lotería del Crimen, entrada por Buscar), Back volvió
+      exactamente a Search (screen_view screen_name:"Search"), no a Home
+      directo -- confirma historial de navegación correcto.
+      Nota lateral: al probar esto por primera vez se entró sin querer a un
+      ítem de "Continuar viendo" que lanza el Player DIRECTO (sin ShowPage
+      intermedia, ya documentado como nota de arquitectura en
+      PROJECT_MEMORY.md) -- Back desde ahí fue a Home en 1 solo paso
+      (coherente, ya que no había ShowPage de por medio). Se repitió la
+      prueba entrando por Search a una ShowPage real para el veredicto
+      correcto del check. CONFIRMADO.
+    - **Check 5** (Back en Home dispara el banner): ya cubierto por el
+      mismo flujo del check 2 (segundo Back desde el nav lateral en Home
+      mostró el banner) -- mismo banner, sin cierre directo sin avisar.
+      CONFIRMADO.
+    Sin errores BRIGHTSCRIPT nuevos en ningún punto del flow.
+
+- id: SC-FLOW-ADS-01
+  title: "[FLOW -- consolida 3 casos] Anuncios: carga sin bloquear, reproducción limpia, Back en medio del ad"
+  area: [client-config, player]
+  severity: major
+  screen: Player, durante un ad break (una sola sesión con pre-roll + mid-roll)
+  steps:
+    - "1. Ad carga sin bloquear (ex SC-ADS-01): reproducir contenido con anuncios configurados, confirmar que el anuncio carga y, si falla, degrada a contenido sin bloquear la reproducción"
+    - "2. Reproducción del ad sin errores nuevos (ex SC-ADS-PLAYBACK-01): dejar que se dispare el pre-roll y, si el contenido lo tiene, un mid-roll; durante el ad confirmar que el scrub no permite saltarlo indebidamente (o documentar si sí se puede); al terminar, confirmar que retoma el contenido real en la posición correcta (seek explícito post-ad ya documentado)"
+    - "3. Back en medio del ad (ex SC-PLAYER-BACK-DURING-AD-01): mientras el ad está reproduciendo, presionar Back y documentar qué pasa (sale del player completo / salta el ad y sigue / estado raro) -- cualquier comportamiento predecible y documentado es válido, sin crash"
+  expected:
+    - Sin excepciones de `roku_ads_lib`/`googleima3` nuevas (los 2 warnings conocidos InnovidDCL/BrightLine no bloqueantes ya están documentados, no repetir ese hallazgo, solo confirmar que no aparece nada MÁS grave)
+    - Transición ad -> contenido limpia, sin pantalla negra prolongada ni freeze
+    - Back durante el ad tiene un comportamiento predecible sin crash ni excepción
+  logs_watch:
+    - Cualquier BRIGHTSCRIPT ERROR durante la ventana del ad que no sean los 2 ya conocidos
+    - Confirmar la línea de "mid-roll finished, seek to <N>" ya documentada
+    - Sin excepciones al salir con Back en medio del ad
+  visual_check: captura durante el ad, captura inmediatamente después de que retoma el contenido real, y captura tras el Back en medio del ad
+  status: >
+    PARCIAL (2026-09-17, continuación 4, device .63, sesión anónima -- ver
+    nota de logout accidental en PROJECT_MEMORY.md). Contenido "Acércate a
+    Rocío" (mismo episodio de 4014-4028s ya conocido por su calendario de
+    ads fijo). **Check 1 (ad carga sin bloquear): CONFIRMADO.** Pre-roll
+    disparó con `code: "303", message: "No Ads VAST Response"` (no-fill) en
+    dos reproducciones distintas -- en ambos casos el player pasó directo a
+    `RAFPlayerTask: state = buffering -> playing` sin bloqueo, confirmado
+    por `VODStartComplete` inmediatamente después. **Check 2 (reproducción
+    del ad sin errores nuevos): CONFIRMADO parcialmente.** Se observó un
+    mid-roll real disparar el mecanismo completo:
+    `RAFPlayerTask: mid-roll ads, stopping video` (posición 2700s) ->
+    `RAFPlayerTask: mid-roll finished, seek to 2700` -- el seek post-ad
+    coincidió exactamente con la posición pre-ad esperada, sin excepción
+    BRIGHTSCRIPT nueva. Un segundo mid-roll cerca del final
+    (`seek to 4020`, coincide con el patrón ya documentado de "el último
+    mid-roll de este episodio siempre reseekea a ~4010-4020") llevó a
+    `state = finished` y la app autoplay limpio a un episodio siguiente
+    ("De mamá a chavorruca") sin intervención -- transición sana, sin
+    crash, subtítulos confirmados renderizando en vivo en la captura
+    posterior (`66-adbreak-autotransition-playing.jpg`). **Check 3 (Back en
+    medio del ad): NO PROBADO esta sesión** -- ambos ad breaks encontrados
+    fueron "no-fill" (transición casi instantánea, sin creative real que
+    interrumpir con Back); queda pendiente para una sesión donde el ad
+    server sí devuelva un anuncio real. Evidencia:
+    reports/azteca/player/CORRIDA-device63-20260917/telnet.log (líneas
+    ~11700-14400 aprox.), captura 66.
+    **Nota de metodología importante**: esta sesión tuvo un problema serio
+    de latencia de input por ECP (ver PROJECT_MEMORY.md) -- varias acciones
+    tardaron 30-90s+ en reflejarse en el log/UI, causando navegación no
+    intencional (incluida una sesión accidental deslogueada). Confirmar
+    SIEMPRE el timestamp del log contra la hora real antes de interpretar
+    el estado como "actual".
+
+    **ACTUALIZACIÓN 2026-09-17 (continuación 6): check 3 sigue SIN
+    PROBARSE, ahora tras intentarlo con 2 contenidos distintos más.**
+    Latencia de ECP diagnosticada al inicio de esta sesión: NORMAL (un
+    keypress de prueba se reflejó en el log en ~2-4s, sin la demora de
+    30-90s de sesiones previas) -- no fue necesario adaptar el método de
+    pacing. Con login restaurado, se reprodujo "Me trata como su gato |
+    Programa del 16 de septiembre 2026" (Acércate a Rocío, contenido
+    nuevo) y se generaron 8 mid-rolls distintos vía avance rápido
+    (`RAFPlayerTask: mid-roll ads, stopping video` -> `mid-roll finished,
+    seek to <N>`, N entre 820 y 4220) -- los 8 fueron no-fill instantáneo
+    (transición stopping->stopped->seek en 1-2s, sin ventana real de
+    anuncio que interrumpir con Back). Mismo patrón consistente con las 2
+    sesiones anteriores. No se pudo reintentar con un tercer contenido
+    distinto por presupuesto de tiempo de esta sesión. **Con 3 sesiones
+    y >10 mid-rolls observados en al menos 2 shows distintos, todos
+    no-fill, se sube la confianza de que esto es una limitación real del
+    entorno de prueba/ad server en este momento (no un problema del
+    método del agente) -- recomendado documentar el check 3 como NO
+    EJECUTABLE en este entorno hasta que el ad server empiece a devolver
+    fills reales, en vez de seguir reintentando indefinidamente.**
+
+- id: SC-PLAYER-CONTENT-MATRIX-01
+  title: "[MATRIZ de contenido] Smoke test de reproducción across Top10 / contenido nuevo / contenido viejo / Live, desde EPG y desde el Hero de Home"
+  area: [player, core-network]
+  severity: major
+  screen: Player (múltiples entradas)
+  steps:
+    - "Caso A: reproducir un contenido del riel Top 10 de Home, entrando por el HERO actual (no por la lista de abajo)"
+    - "Caso B: reproducir contenido nuevo/reciente (recién agregado, ej. de un riel tipo 'Nuevo' o el episodio más reciente de un show activo), entrando por el hero"
+    - "Caso C: reproducir contenido antiguo/viejo (un episodio de temporada vieja, contenido de hace tiempo), entrando por el hero"
+    - "Caso D: reproducir un canal Live, esta vez entrando desde la guía EPG (no desde el hero de Home)"
+    - Para cada caso: confirmar que carga, reproduce, responde a Play/Pause/Fwd/Rev básico, sin errores nuevos en el log
+  expected:
+    - Los 4 tipos de contenido reproducen igual de bien, sin diferencias de comportamiento entre contenido nuevo/viejo/Top10/Live
+  logs_watch:
+    - Sin excepciones BrightScript no manejadas en ninguno de los 4 casos
+    - Confirmar `player_ready`/`video_type` correcto para cada uno (VOD vs Live)
+  visual_check: captura de cada uno de los 4 en reproducción
+  status: >
+    PARCIAL (2026-09-17 continuación 4/5, device .63, sesión anónima --
+    ver nota de logout accidental en PROJECT_MEMORY.md; no bloqueante
+    para este escenario porque el VOD/Live reproduce igual sin sesión).
+    **Caso A (Top 10) -- CONFIRMADO con salvedad de entrada.** "Acércate a
+    Rocío" está confirmado presente en el riel "Top 10" de Home (visible
+    en captura tras el logout accidental, fila con ícono de estrella) y
+    se reprodujo sin errores (mismo contenido usado en SC-FLOW-ADS-01
+    arriba). Salvedad: se entró vía Buscar en vez de literalmente desde
+    el hero/Top10 de Home por eficiencia de navegación esta sesión -- el
+    contenido y su comportamiento de reproducción son los mismos, pero no
+    queda 100% confirmado el camino exacto "hero de Home" pedido por el
+    escenario.
+    **Caso D (Live desde EPG) -- CONFIRMADO.** Desde la guía EPG ("En
+    vivo" en el riel lateral), canal "adn Noticias" / "Noticias en Tiempo
+    Real con Uriel Estrada y Romina Ramos" seleccionado y reproducido:
+    `query/media-player` confirmó `is_live blocked="false">true`,
+    `state="play"`, sin error. `player_ready`/`video_views` con
+    `video_type:"Live"` correcto. Play/Pause respondió sin excepción
+    (permanece en `state=play`, comportamiento esperado de un live sin
+    trickplay real). Únicos BRIGHTSCRIPT vistos son los 2 warnings ya
+    conocidos y no bloqueantes de `roku_ads_lib`
+    (InnovidDCL/BrightLine). Captura:
+    73-matrix-caseD-live.jpg (negra, política ya documentada).
+    **Caso B (contenido nuevo/reciente) y Caso C (contenido viejo) --
+    NO CUBIERTOS esta sesión** por presupuesto de tiempo (la mayor parte
+    del tiempo se fue en recuperar la navegación tras el logout accidental
+    y en SC-FLOW-ADS-01). Quedan PENDIENTES, no fallidos -- para la
+    próxima sesión, usar por ejemplo el episodio más reciente de un show
+    activo (Caso B) y un episodio de temporada vieja de un show con
+    varias temporadas, ej. "Acércate a Rocío" temporada 1 vs. temporada 4
+    (Caso C), ambos entrando por el hero de Home.
+    Evidencia: reports/azteca/player/CORRIDA-device63-20260917/telnet.log
+    (líneas ~14390-14970 aprox.), capturas 72 (EPG) y 73 (Live playing).
+
+    **ACTUALIZACIÓN 2026-09-17 (continuación 6): login restaurado, Casos B
+    y C completados -- LOS 4 CASOS QUEDAN CONFIRMADOS.** Login resuelto
+    (ver PROJECT_MEMORY.md) permitió acceder a Favoritos de la cuenta de
+    prueba. **Caso B (contenido nuevo):** desde Favoritos -> "Acércate a
+    Rocío" -> VER AHORA (hero), reprodujo "Me trata como su gato |
+    Programa del 16 de septiembre 2026" (video_id
+    6aab3b93ebfe5fa3a1e5f559, el mismo día de esta corrida) --
+    `player_ready`/`VODStartComplete` sin error, `video_type:"VOD"`,
+    duración 01:10:25. CONFIRMADO. **Caso C (contenido viejo):** desde
+    Favoritos -> "Lo Que La Gente Cuenta: el podcast" (programa de 2022) ->
+    VER AHORA, reprodujo "Episodio 16: El último adiós" (video_id
+    68622ac8e53cbd72152df4c3, duración 00:11:24) -- `VODStartComplete` sin
+    error, Play/Pause y Fwd+Select respondieron normal
+    (`RAFPlayerTask: state` alternó playing/paused/buffering sin
+    excepción). CONFIRMADO. Con esto los 4 casos (A, B, C, D) de
+    SC-PLAYER-CONTENT-MATRIX-01 quedan cubiertos. Evidencia: telnet.log
+    líneas ~15330-16230 aprox., capturas 91, 96, 97.
+
+    RE-CORRIDA 2026-09-18 (device 192.168.1.54, build v1.24.92609040) --
+    los 4 tipos re-confirmados reproducen, PERO surgió un HALLAZGO MAJOR
+    NUEVO sobre contenido restringido (ver también SC-PAYWALL-01):
+    - Case A (Top 10 por hero): resultado MIXTO. El Top 10 #4 "Venga La
+      Alegría" reproduce perfecto (query/media-player state="play",
+      error=false, VOD/HLS/H.264). PERO el Top 10 #1 "Exatlón México"
+      NO reproduce: el endpoint de stream-data responde
+      `issuccess:false, reason:"Forbidden"` (HTTP 403) y el player se cierra.
+      Verificado que NO es solo por estar deslogueado: dio 403 estando
+      anónimo Y también tras loguear con la cuenta de prueba
+      jmatevargas@poligran.edu.co (login_success/connected confirmado) --
+      falló igual en Programas completos Y en Mejores momentos (4
+      ocurrencias de Forbidden en total). Es decir, el show "Exatlón
+      México" completo está gateado por entitlement/suscripción que esta
+      cuenta no tiene. **BUG asociado (major):** el SDK del player maneja
+      MAL el 403 -- hace `ParseJSON` del string crudo "Forbidden" ->
+      `BRIGHTSCRIPT: ERROR: ParseJSON: Unknown identifier 'Forbidden':
+      mediastreamrokuplayersdk:/source/apis/MediaStreamPlayerAPI.brs(68)`
+      -> `MediaStreamPlayer : onGetStreamDataTaskApiResponse : *** ERROR ***`
+      -> `closePlayer` SILENCIOSO. Desde el usuario: al dar play "no pasa
+      nada", vuelve a la ShowPage sin mensaje, sin PaymentRequiredPage y
+      sin prompt de login. Reportar al equipo de Core/Player.
+    - Case B (nuevo) / Case C (viejo) / Case D (Live): re-cubiertos en .54
+      por otros escenarios de esta misma sesión (SC-SHOW-01 = VOD reciente
+      "Historias de Vida" reprodujo OK; SC-SHOW-AOD-01 = contenido viejo de
+      2022 "Lo Que La Gente Cuenta" reprodujo OK como video; AC-UL-04 =
+      Live "A Quien Corresponda" reprodujo OK). Todos sin excepción salvo
+      el caso Exatlón/Forbidden.
+    Evidencia: reports/azteca/2026-09-18_18-00-player/{logs/SC-PLAYER-CONTENT-MATRIX-01.log,videos/SC-PLAYER-CONTENT-MATRIX-01.mp4,screenshots/SC-MATRIX-01-01..13-*.jpg}
+
+# --- Escenarios adicionales de estrés/adversarial (aporte propio, mismo
+# espíritu que scenarios/shared/navegacion/estres/) -- pensados
+# específicamente para intentar romper el Player, no solo confirmar que
+# funciona en el camino feliz.
+
+- id: SC-FLOW-STRESS-01
+  title: "[FLOW -- consolida 3 casos de estrés de interacción rápida] Ráfaga sobre 'Ver ahora', reentrada rápida repetida, ráfaga post-Up Next"
+  area: [player, core-network]
+  severity: major
+  screen: ShowPage (hero) / Player (3 puntos de disparo distintos)
+  steps:
+    - "1. Ráfaga sobre 'Ver ahora' del hero (ex SC-VERAHORA-RAPID-CRASH-01, PRIORIDAD ALTA -- bug reportado por el usuario 2026-09-16, no confirmado todavía): entrar a un show con foco en 'Ver ahora'/'VER AHORA' del hero (NO la lista de episodios), presionar Select 4-5 veces rápido y seguido, observar si la app/player se cierra solo o hay crash/freeze. IMPORTANTE: es intermitente -- si no se reproduce a la primera, repetir el flujo completo (salir, reentrar, repetir la ráfaga) al menos 3 veces antes de concluir que no se reproduce (el usuario reportó ~3 intentos típicos). Repetir con AL MENOS 2 shows distintos para no confundir 'un show específico tiene un problema' con 'es un problema general del botón'"
+    - "2. Salir y reentrar repetidas veces (ex SC-PLAYER-REENTRY-STRESS-01): entrar al player, Back para salir, volver a entrar -- repetir el ciclo 5-6 veces seguidas rápido, confirmar que cada entrada es limpia (sin lag creciente, sin acumulación de errores)"
+    - "3. Ráfaga tras autoplay de Up Next (ex SC-PLAYER-UPNEXT-RAPID-01): dejar que un episodio llegue a su fin natural y dispare Up Next/autoplay del siguiente, en cuanto arranca el nuevo episodio presionar Select en ráfaga varias veces (mismo criterio que el check 1, varios intentos si hace falta)"
+  expected:
+    - En los 3 puntos de disparo, el player/app debe abrir y quedar reproduciendo normal, sin cerrarse solo, sin importar cuántos toques de más reciba
+    - Check 2 además: sin degradación de responsividad entre ciclo y ciclo, sin errores acumulativos en el log
+  logs_watch:
+    - Sin excepciones BrightScript no manejadas inmediatamente después de cada ráfaga
+    - Si la app se cierra, buscar `EXIT_USER_NAV` o cualquier línea de cierre SIN que se haya enviado Back/Home real -- eso confirmaría cierre no intencional (mismo patrón sospechado en sesión 2026-09-11, nunca confirmado, ver PROJECT_MEMORY.md "Posible bug serio sin confirmar: la app se cerró sola")
+    - Contar `onKeyEvent : key = OK` registrados vs. Select enviados -- si la app está "atragantada" procesando de a uno, puede explicar la intermitencia
+    - Check 2: comparar cantidad/tipo de líneas de log entre el 1er y el último ciclo -- degradación notoria sería señal de leak
+  visual_check: >
+    captura inmediatamente después de cada ráfaga (los 3 checks), captura
+    de diagnóstico completa si se observa un cierre/crash real, y captura
+    del 1er vs. último ciclo del check 2 para comparar
+  status: >
+    PARCIAL (2026-09-17 continuación, device .63). Check 1 (bug "Ver
+    ahora", PRIORIDAD ALTA) -- NO SE REPRODUJO en 6/6 intentos: 3 ráfagas
+    de 5 Select rápidos (150ms entre cada uno) sobre "VER AHORA" con foco
+    confirmado por captura en "Acércate a Rocío" (3/3 sin bug, sale-y-
+    reentra cada vez con Back+navegación completa) y 3 más en "Venga La
+    Alegría" (3/3 sin bug). En los 6 intentos `query/active-app` confirmó
+    `id="dev"` intacto después de cada ráfaga, sin excepción BRIGHTSCRIPT
+    nueva en el log, el player siempre quedó en `RAFPlayerTask: state =
+    playing`. Dato de log interesante: de los 5 Select enviados por ráfaga,
+    consistentemente solo 1-2 `onKeyEvent : key = OK` quedaban registrados
+    (el resto se pierden/coalescen) -- consistente con la hipótesis ya
+    documentada de "app atragantada procesando de a uno", pero sin
+    consecuencia visible (no crashea, no cierra, no duplica el player).
+    No se puede subir la conclusión a "bug descartado" (es intermitente por
+    reporte del usuario, ~3 intentos típicos para verlo, y esta corrida usó
+    exactamente eso), pero con 6 intentos limpios en 2 shows distintos la
+    confianza de "no reproducible en esta sesión" es razonable.
+    Check 2 (salir/reentrar 5-6 veces) -- completado con una salvedad: 6
+    ciclos de Back+Select con cadencia de ~1-1.2s entre cada uno, sin
+    crash, `active-app` intacto al final, subtítulos renderizando en vivo
+    en la captura final (confirma que el player seguía sano, no colgado).
+    PERO el log muestra que de los 6 ciclos solo 2 generaron un
+    `VODStartComplete` nuevo/distinto -- varias reentradas rápidas no
+    llegaron a registrar un re-arranque completo del player (mismo patrón
+    de "coalescing" de inputs que el check 1). No es un crash ni
+    degradación creciente (el último ciclo funcionó igual de bien que el
+    primero), pero la cadencia usada fue demasiado rápida para que la app
+    procese cada reentrada por separado -- recomendado para una futura
+    corrida usar ~2-3s entre ciclos si se quiere medir cada reentrada
+    individualmente en vez de solo confirmar ausencia de crash.
+    Check 3 (ráfaga tras autoplay de Up Next) -- NO COMPLETADO: el
+    contenido usado para checks 1/2 ("Venga La Alegría", programa completo
+    de ~3 min en este caso) llegó a su fin real (`RAFPlayerTask: state =
+    finished`) y cerró el player limpio a ShowPage, pero NUNCA mostró
+    botones de Up Next/"Siguiente episodio" -- este tipo de contenido
+    (programa de variedades diario, no una serie con episodios
+    encadenados) no dispara ese flujo. Queda PENDIENTE, requiere repetirse
+    con contenido episódico real (ej. "Lotería del Crimen" temporada 1) y
+    `scripts/smart-seek-agent.js` para llegar cerca del final sin mirar en
+    tiempo real -- no se llegó a intentarlo por presupuesto de esta sesión.
+    Evidencia: reports/azteca/player/CORRIDA-device63-20260917/telnet.log
+    (líneas ~1764-5931), capturas 11 a 20 (11/12/13 exploración de
+    navegación del hero, 15/18 foco confirmado en VER AHORA de cada show,
+    16/19 player en reproducción tras ráfaga, 20 estado final sano tras
+    check 2).
+
+    **ACTUALIZACIÓN 2026-09-17 (continuación 3): check 3 COMPLETADO,
+    FLOW COMPLETO (3/3).** Se usó contenido episódico real ("Lotería del
+    Crimen", Temporada 1, 25 episodios) vía Buscar -> "Lotería del Crimen"
+    -> Temporada 1 -> Episodio 1 ("El Brujo: Capítulo 1", 44:40).
+    `scripts/smart-seek-agent.js` (ROKU_HOST=192.168.1.63) llevó la
+    reproducción hasta el final real 2 VECES SEGUIDAS (episodio 1->2 y
+    2->3), confirmando en ambos casos autoplay real de Up Next: secuencia de
+    log `RAFPlayerTask: state = finished` -> `stopped` -> nuevo
+    `BaseRequests : getRequest url : .../episode/<ID-DISTINTO>.json` ->
+    `playVideo : Seek parameter = 0` -> `VODStartComplete` con
+    `playback_id` nuevo. En AMBAS transiciones, apenas arrancó el episodio
+    siguiente se disparó una ráfaga de 5 Select (150ms entre cada uno):
+    **2/2 sin crash, sin freeze, sin excepción BRIGHTSCRIPT nueva** --
+    `query/active-app` confirmó `id="dev"` intacto después de cada ráfaga,
+    los 5 `onKeyEvent : key = OK press = false` quedaron registrados en el
+    log ambas veces (a diferencia de los checks 1/2 de "Ver ahora"/
+    reentrada, acá NO hubo coalescing aparente -- las 5 pulsaciones se
+    registraron completas en las 2 muestras), y el player siguió en
+    `state = playing` normal después de cada ráfaga. Evidencia: mismo
+    telnet.log (líneas ~6600-8570 aprox.), captura
+    29-stress-check3-after-burst.jpg (negra, esperado -- política ya
+    documentada de que el video nunca se ve en capturas de Roku) y
+    30-check3-ep3-playing-subtitles.jpg. **Con esto los 3 checks de
+    SC-FLOW-STRESS-01 quedan cubiertos** (check 1 intermitente sin
+    reproducir en 6/6, check 2 completado con salvedad de cadencia, check 3
+    ahora completado 2/2 sin incidentes) -- el flow completo puede
+    considerarse CONFIRMADO en su totalidad, con el check 1 como único punto
+    que sigue "abierto" por su naturaleza intermitente ya documentada (no
+    bloqueante, no es este check).
+
+    RE-CONFIRMADO 2026-09-18 (device 192.168.1.54, build v1.24.92609040,
+    sesión logueada con jmatevargas@poligran.edu.co):
+    - Check 1 (ráfaga "Ver ahora", PRIORIDAD ALTA): NO SE REPRODUJO en
+      6/6 intentos en 2 shows distintos -- 3 ráfagas de 5 Select rápidos
+      (150ms) sobre VER AHORA de "Venga La Alegría" (3/3) y 3 sobre
+      "Ventaneando" (3/3). En los 6, query/active-app quedó id="dev"
+      intacto, player en state="play", 0 excepciones BRIGHTSCRIPT /
+      0 EXIT_USER_NAV / 0 "Exiting 'TV Azteca". Confianza "no reproducible
+      en esta sesión" consistente con .63.
+    - Check 2 (salir/reentrar): 6/6 ciclos Back+VER AHORA (cadencia ~1.2s),
+      app id="dev" intacto en cada ciclo, estado final playing, 0
+      excepciones -- sin crash ni degradación creciente.
+    - Check 3 (ráfaga post Up Next): NO re-ejecutado en .54 -- ya quedó
+      CONFIRMADO 2/2 en .63 (autoplay real + ráfaga sin crash). Un intento
+      de setup con smart-seek-agent en .54 sobre un programa de ~39min
+      falló (smart-seek exit 2 a ~55%) y llegar al final natural era
+      impráctico por presupuesto; no se re-valida porque .63 ya lo cubre.
+    Evidencia: reports/azteca/2026-09-18_18-00-player/{logs/SC-FLOW-STRESS-01.log,videos/SC-FLOW-STRESS-01.mp4,screenshots/SC-STRESS-01-01..04-*.jpg}
+

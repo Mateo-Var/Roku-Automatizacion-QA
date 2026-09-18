@@ -1,0 +1,34 @@
+# Plantilla de perfil de cliente -- copiar a scenarios/clients/<cliente-nuevo>/profile.yaml
+# y completar. Ver scenarios/clients/azteca/profile.yaml como ejemplo real ya lleno.
+#
+# SOLO metadata, NUNCA credenciales reales acá -- esas van al .env local
+# y se piden al usuario al arrancar cada sesión, nunca a un archivo
+# versionado del repo.
+
+client_id: ""              # ej. "ondamedia"
+repo_branch: ""            # ej. "client/ondamedia" en ott-next-roku-tv-customer-apps
+
+device:
+  last_known_ip: ""        # preguntar siempre al usuario, esto puede quedar desactualizado
+  note: ""                 # ej. "es el mismo Roku que Azteca" / "es un device nuevo, confirmar que no es el de firma de CI/CD"
+
+credentials:
+  note: >
+    Ver .env local para acceso al device. La cuenta de prueba de la app se
+    pide al usuario al arrancar -- no se guarda en el repo.
+
+known_feature_flags:
+  registro_habilitado: null
+  login_con_otp_habilitado: null
+  login_gatea_reproduccion: null
+  paywall_encontrado: null
+
+known_quirks: []
+
+known_bugs_confirmed: []
+
+pendiente_de_confirmar_si_es_del_core_o_de_este_cliente: >
+  Si algún bug ya confirmado en otro cliente (ver
+  scenarios/clients/azteca/profile.yaml) también aparece acá, es evidencia
+  de que es del Core compartido, no de la config de un cliente específico
+  -- actualizar ese hallazgo en PROJECT_MEMORY.md para reflejarlo.

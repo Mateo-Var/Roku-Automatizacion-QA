@@ -1,0 +1,61 @@
+# Escenarios compartidos (Core) — Arranque, conectividad, deep linking
+#
+# Ver scenarios/shared/README.md para la convención de `area`/`severity`/`status`.
+# Estado (2026-09-15): definidos en Fase 0, sin correr todavía contra el
+# device real (había corridas viejas de smoke-test del device-runner
+# original, ver reports/_archive/2026-09-11T*/, pero no una validación
+# formal como la que se hizo con login-registro).
+
+- id: SC-BOOT-01
+  title: Arranque de la app y carga del Core
+  area: [player, core-network, client-config]
+  severity: blocker
+  screen: MainScreen (Azteca)
+  steps:
+    - Lanzar el canal desde cero (cold start)
+    - Observar el ComponentLibrary (rokuMSSdkComponentLib) cargar el .pkg indicado en appConfig.pkgLibUrl
+    - Esperar loadStatus = "ready"
+  expected:
+    - MainLibScene se instancia y reemplaza el preloader sin quedar colgado
+    - No aparece el label de error ("App initilization failed...")
+  logs_watch:
+    - 'la línea "MainScreen : onLoadStatusChanged : loadStatus : ready" debe aparecer'
+    - 'ninguna línea "loadStatus : failed"'
+    - Sin excepciones de compilación / Component Library
+  visual_check: screenshot al terminar el preloader (comparar contra baseline "home o login")
+
+- id: SC-BOOT-02
+  title: Fallo controlado si el .pkg del Core no carga
+  area: [player, client-config]
+  severity: blocker
+  screen: MainScreen (Azteca)
+  steps:
+    - Forzar (en entorno de prueba) un pkgLibUrl inválido o el .pkg no accesible
+  expected:
+    - Se muestra el mensaje de error, no un crash ni pantalla en negro
+  logs_watch:
+    - 'la línea "loadStatus : failed" o el appSDKErrorStatus con errorMsg'
+
+- id: SC-CONN-01
+  title: Pérdida y recuperación de conexión a internet
+  area: [core-network]
+  severity: major
+  screen: MainScreen (Azteca) -> propagado a MainLibScene
+  steps:
+    - Con la app ya cargada, cortar la red del Roku
+    - Esperar el ciclo del connectionTimer (cada 5s)
+    - Restaurar la red
+  expected:
+    - internetConnection se propaga a MainLibScene (linkStatus/internetConnection)
+    - La UI refleja el estado (banner/mensaje esperado, sin romper navegación)
+  logs_watch:
+    - Sin excepciones no manejadas en onConnectionChange / onLinkStatusChanged
+- id: SC-DEEPLINK-01
+  title: Deep linking (launch con contentId)
+  area: [client-config, core-network]
+  severity: minor
+  screen: MainScreen -> handleDeeplinkingLaunchEvent
+  steps:
+    - Lanzar el canal con parámetros de deep link (contentId, mediaType)
+  expected:
+    - Navega directo al contenido indicado, sin pasar por Home primero

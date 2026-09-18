@@ -1,0 +1,20 @@
+node_modules/
+reports/*
+!reports/.gitkeep
+
+# Certificado TLS autofirmado local (scripts/camera-server.js) -- se
+# regenera con openssl, no hace falta versionarlo.
+scripts/.certs/
+
+# Backups locales de reorganizaciones -- nunca deberían estar dentro del
+# repo (viven en la carpeta padre), esto es solo por las dudas.
+*-BACKUP-*/
+
+# Archivos de estado en tiempo de ejecución de los scripts de grabación
+# (record-suitest.ps1, camera-server.js, suitest-record.js) -- se generan
+# y borran solos en cada corrida, nunca deberían versionarse.
+scripts/.suitest-record.*
+scripts/.camera-server.state.json
+scripts/.camera-upload-*.webm
+
+.claude/scheduled_tasks.lock

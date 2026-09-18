@@ -1,0 +1,263 @@
+# Escenarios compartidos (Core) — Navegación de ESTRÉS / adversarial
+#
+# ===========================================================================
+# CORRIDA 2026-09-18 17:50-17:58 UTC — device 192.168.1.54, build
+# v1.24.92609040, sesión logueada. PRIMERA corrida post-reorganización.
+# Evidencia: reports/azteca/2026-09-18_17-25-navegacion/.
+#
+#   SC-BACK-SPAM-01          PASA. 20 Back en ráfaga (sin delay) desde
+#     navegación profunda (Favoritos -> Show -> Player). Desenrolla limpio
+#     hasta FavoritePage con el sidebar expandido; sin crash, sin estado
+#     huérfano, sin excepciones en log, y NO sale de la app (se frena en el
+#     sidebar en vez de cerrar el canal).
+#   SC-NAV-MIDLOAD-01        PASA con observación. Back disparado
+#     inmediatamente después de tipear en Search (a mitad de la carga de
+#     red): no deja estado huérfano ni crashea, el foco vuelve al sidebar.
+#     Observación menor: el campo de búsqueda se vacía pero los resultados
+#     de la consulta anterior quedan en pantalla -- desincronía visual, sin
+#     consecuencia funcional.
+#   SC-FAV-TOGGLE-STRESS-01  PASA. 11 toggles rápidos (250ms) sobre
+#     "Acércate a Rocío": estado final coherente con la paridad impar
+#     (partió marcado -> terminó desmarcado), confirmado tanto por el
+#     corazón de ShowPage como por su desaparición de FavoritePage. Sin
+#     crash ni freeze. Se contaron EXACTAMENTE 11 excepciones BrightScript
+#     (1 por toggle, la de ShowPage.brs(1086)) -- lo que confirma que esa
+#     excepción es determinística y no una condición de carrera.
+#   SC-FOCUS-EDGES-01        PASA. 15 Up / 20 Down / 15 Left contra los
+#     bordes de Home: el foco nunca desaparece ni queda atrapado. En el
+#     borde superior queda en el riel EN VIVO, en el inferior en
+#     "Recomendados para ti", y por izquierda desborda al sidebar.
+#   SC-SEARCH-XSS-RENDER-01  PASA. `<script>alert(1)</script>` inyectado por
+#     ECP (equivalente a tipearlo desde el teclado del celular vía el QR que
+#     ofrece Roku, ya que el teclado en pantalla de la app no tiene esos
+#     caracteres). Se renderiza como texto plano literal en el campo, NO se
+#     interpreta como código, sin excepción BrightScript ni crash. Nota
+#     menor de relevancia: la consulta devuelve una lista genérica de
+#     resultados en vez de "sin resultados".
+#   SC-MULTI-ENTRY-SHOW-01   NO CORRIDO en esta sesión.
+# ===========================================================================
+#
+# Ver scenarios/shared/README.md para la convención de `area`/`severity`/`status`.
+#
+# Origen: pedido explícito del usuario (2026-09-15) de pensar "como un QA
+# que intenta romper la aplicación" a nivel de navegación -- son casos que
+# buscan activamente condiciones límite (ráfagas, interrupciones de carga,
+# entradas repetidas, bordes de listas) en vez de flujos normales. Ninguno
+# corrido todavía contra el device real.
+
+- id: SC-BACK-SPAM-01
+  status: >
+    CONFIRMADO -- corrida CORRIDA-EXTENDIDA-device63-20260915 contra
+    192.168.1.63 (device distinto al habitual .186, primera corrida de
+    este escenario en cualquier device). Navegación profunda real:
+    Discover -> CategoryGridPage ("Regional News México") -> Show
+    ("Zacatecas") -> show relacionado ("Yucatán") -- 4 niveles. Ráfaga de
+    10 Back seguidos (150ms entre cada uno). Secuencia `screen_name`
+    resultante coherente y sin saltos raros: Yucatán -> Zacatecas ->
+    Category -> Discovery -> (backs restantes absorbidos, sin más
+    retroceso posible ni error) -- terminó con el nav lateral abierto
+    sobre Discovery, foco visible en "Secciones", sin overlap, sin
+    congelamiento del mando, sin ninguna excepción BrightScript durante
+    toda la ráfaga (captura 22).
+  title: Back en ráfaga desde navegación profunda no crashea ni deja la app en estado roto
+  area: [core-ui]
+  severity: major
+  screen: Múltiples (Home -> Discover -> Show -> show relacionado)
+  steps:
+    - Navegar profundo -- Home -> Discover -> entrar a un show -> entrar a un show relacionado desde "Relacionados" (2-3 niveles de profundidad)
+    - Presionar Back 8-10 veces seguidas, rápido, sin pausar a observar entre toque y toque
+    - Recién después de la ráfaga, revisar dónde terminó (log + captura)
+  expected:
+    - Sin crash de la app, sin que el remoto deje de responder
+    - Termina en un lugar predecible (idealmente Home, o el banner de confirmación de salida si llegó al fondo del historial) -- no en una pantalla rota/en blanco/congelada
+  logs_watch:
+    - Sin excepciones BrightScript no manejadas durante la ráfaga
+    - Secuencia de `screen_name` debería ser coherente con ir retrocediendo un paso genuino por cada Back, no saltos raros
+
+- id: SC-NAV-MIDLOAD-01
+  status: >
+    CONFIRMADO -- corrida CORRIDA-EXTENDIDA-device63-20260915 contra
+    192.168.1.63 (device distinto al habitual .186, primera corrida de
+    este escenario). Caso Search: tipeada "docufia" (búsqueda es
+    incremental/en vivo por carácter, no requiere Select para buscar) y
+    Back presionado casi inmediatamente tras el último carácter -- sin
+    excepción BrightScript, sin error de red visible, layout limpio en el
+    siguiente reingreso (captura 24). Caso ShowPage: entrada a "La
+    Revolución De La Libertad" y Back disparado ~150ms después (antes de
+    confirmar carga completa de imágenes/metadata) -- sin crash, reingreso
+    posterior a Search mostró resultados igual de limpios que antes
+    (captura 25), sin quedar afectado por la salida abrupta. Ninguna señal
+    de request "colgado" afectando cargas siguientes en ninguno de los 2
+    casos.
+  title: Salir de una pantalla a mitad de carga no deja estado huérfano
+  area: [core-network, core-ui]
+  severity: major
+  screen: SearchPage / ShowPage (cualquiera con carga de red visible)
+  steps:
+    - Entrar a Search, escribir una búsqueda, y presionar Back INMEDIATAMENTE tras confirmar (antes de que los resultados terminen de cargar)
+    - Repetir el mismo patrón entrando a un ShowPage y saliendo con Back antes de que carguen las imágenes/metadata
+    - Volver a entrar a esas mismas pantallas normalmente después, confirmar que cargan bien (sin quedar afectadas por la salida abrupta anterior)
+  expected:
+    - Sin crash al salir a mitad de carga
+    - La llamada de red que quedó "en el aire" no genera un error visible más tarde ni dejó el request colgado afectando la siguiente entrada a esa pantalla
+  logs_watch:
+    - Vigilar si aparece algún error de red/timeout asociado al request cancelado, y si afecta la carga siguiente de esa misma pantalla
+
+- id: SC-FAV-TOGGLE-STRESS-01
+  status: >
+    🔴 HALLAZGO REAL CONFIRMADO -- corrida CORRIDA-EXTENDIDA-device63-20260915
+    contra 192.168.1.63 (device distinto al habitual .186, primera corrida
+    de este escenario). Sobre "Lotería del Crimen" (estado inicial: NO
+    favorito, confirmado), 6 toggles rápidos del corazón (250ms entre cada
+    uno) -- las 6 excepciones BrightScript ya conocidas
+    (`ShowPage.brs(1086)`, ver SC-FAV-01) se dispararon 1:1 con cada
+    toggle (confirmado por conteo exacto en el log). El ícono del corazón
+    en la ShowPage QUEDÓ MOSTRANDO VACÍO (no favorito) inmediatamente
+    después de la ráfaga (captura 56) -- consistente con 6 toggles (par)
+    desde un estado inicial "no favorito". PERO al navegar a FavoritePage
+    inmediatamente después, "Lotería del Crimen" SEGUÍA apareciendo como
+    favorito (captura 58) -- **inconsistencia real entre lo que muestra el
+    ícono en ShowPage y el estado realmente persistido**. Al volver a
+    entrar a la ShowPage con una carga fresca (no cacheada), el corazón
+    mostró CORRECTAMENTE el estado real (favorito, sólido -- captura 59).
+    Conclusión: el ícono de favorito en ShowPage puede quedar
+    visualmente desincronizado del estado real persistido tras un toggle
+    en ráfaga, hasta que la página se recarga fresca -- el dato
+    persistido en sí es correcto (Favoritos es la fuente de verdad
+    correcta), pero la UI de ShowPage puede mentir sobre el estado actual
+    sin refrescar. Esto es DISTINTO y ADICIONAL al bug ya conocido de la
+    excepción `ShowPage.brs(1086/1087)` -- ese es un error no manejado que
+    no rompe la función; ESTE es un desync visual real que sí puede
+    confundir al usuario (cree que no está en favoritos cuando sí lo
+    está). Severidad sugerida: major (afecta la confianza del usuario en
+    el estado mostrado, aunque el dato de fondo esté bien). Recomendado
+    para reportar junto con el hallazgo de Exatlón (SC-FAV-INSTANT-01).
+  title: Marcar/desmarcar favorito en ráfaga termina en un estado final consistente
+  area: [core-network, core-ui]
+  severity: major
+  screen: ShowPage / FavoritePage
+  steps:
+    - Sobre un show, presionar el botón de favorito (Select sobre el corazón) 6-8 veces seguidas y rápido, alternando marcar/desmarcar
+    - Esperar a que se estabilice, revisar el estado final del ícono en ShowPage
+    - Ir a FavoritePage y confirmar si el show aparece o no ahí
+  expected:
+    - El estado final del corazón en ShowPage debe COINCIDIR con si el show aparece o no en FavoritePage -- no debe quedar inconsistente (ej. corazón lleno pero no está en Favoritos, o viceversa)
+    - Sin crash pese al toggling rápido
+  logs_watch:
+    - Contar cuántos toggles reales se registraron en el log vs. cuántos se enviaron -- si se pierden algunos, entender si eso explica una posible inconsistencia final
+    - Es esperable que dispare la excepción ya conocida ShowPage.brs(1087) en cada toggle -- no repetir ese análisis, solo confirmar que no impide llegar a un estado consistente
+
+- id: SC-FOCUS-EDGES-01
+  status: >
+    CONFIRMADO -- corrida CORRIDA-EXTENDIDA-device63-20260915 contra
+    192.168.1.63 (device distinto al habitual .186, primera corrida de
+    este escenario). Borde derecho: 27 Right seguidos sobre el riel EN
+    VIVO de Home -- se estabilizó en "Deporte Gourmet" (último ítem real
+    del riel), foco siempre visible, 2 capturas separadas (12 y 27 Rights)
+    pixel-idénticas confirmando que no sigue "empujando" ni rompe nada
+    pasado el borde (capturas 31-32). Borde superior-izquierdo: Left x12 +
+    Up x3 desde el primer riel -- abrió el nav lateral con foco visible en
+    "Inicio", el riel detrás volvió al primer ítem real sin overlap
+    (captura 33). En ambos bordes el comportamiento es predecible (se
+    queda quieto en el límite, o pasa a un elemento de navegación
+    distinto) y el foco NUNCA desapareció.
+  title: El foco no desaparece ni queda atrapado en los bordes de una lista
+  area: [core-ui]
+  severity: minor
+  screen: HomePage (rieles) / cualquier lista larga
+  steps:
+    - Navegar hasta el primer ítem del primer riel de Home (arriba a la izquierda) y seguir presionando Up/Left varias veces de más, más allá del borde
+    - Navegar hasta el último ítem de un riel largo y seguir presionando Right varias veces de más
+    - En ambos casos, confirmar que el foco sigue siendo visible y en un ítem real, no desaparecido
+  expected:
+    - El foco nunca desaparece de la pantalla
+    - Presionar de más en un borde no rompe la navegación (se queda quieto ahí, o hace algo predecible como pasar a otro riel -- pero siempre con foco visible)
+  logs_watch:
+    - Ninguno específico -- este es principalmente un chequeo visual
+  visual_check: captura en cada borde probado, después de la ráfaga de más
+
+- id: SC-MULTI-ENTRY-SHOW-01
+  status: >
+    CONFIRMADO -- corrida CORRIDA-EXTENDIDA-device63-20260915 contra
+    192.168.1.63 (device distinto al habitual .186, primera corrida de
+    este escenario). Show usado: "Exatlón Décima Temporada" (2 entradas
+    cubiertas, no 3 -- no se encontró en Home por ser el hero/riel de Home
+    contenido 100% de tipo Live/Player directo en este device, sin
+    ShowPage intermedia -- ver nota abajo). Entrada 1 (Discover, fila
+    "Realities y concursos"): estado del corazón vacío (no favorito),
+    Back -> vuelve a Discovery (origen correcto). Entrada 2 (Search,
+    "exatlon decima"): mismo estado del corazón (vacío, consistente), Back
+    -> vuelve a Search (origen correcto, NO a Home). Ambas entradas
+    confirmadas con captura + log `screen_name` antes/después. Nota
+    operativa: la primera vez que se probó esto el Back pareció volver a
+    "Home" en vez de "Discovery" -- investigado y descartado como bug: fue
+    contaminación metodológica propia (navegación previa ambigua, no una
+    entrada limpia desde Discovery) -- repetido con pasos verificados paso
+    a paso y el comportamiento fue correcto las 2 veces limpias.
+
+    RE-CONFIRMADO (2026-09-18, device 192.168.1.54, build v1.24.92609040) --
+    PASA de nuevo, la regla de "Back vuelve al origen real" se re-confirma
+    en el device habitual actual con 2 puntos de entrada distintos en la
+    misma corrida:
+    - Entrada A (Search): Buscar "exatlon" -> resultado "Exatlón Décima
+      Temporada" (PROGRAMA DE TELEVISIÓN) -> ShowPage (Episodios/Acerca de
+      este contenido/Relacionados, "13 TEMPORADAS") -> Back -> vuelve a
+      "Resultados de la búsqueda" con el query intacto (origen correcto, NO
+      Home).
+    - Entrada B (Secciones/Discover): "Todas las categorías" -> show
+      "Lotería del Crimen" (PROGRAMA DE TELEVISIÓN) -> ShowPage ("2
+      TEMPORADAS", VER AHORA) -> Back -> vuelve a "Todas las categorías"
+      con el mismo ítem enfocado (origen correcto, NO Home).
+    En ambas ShowPages de este build/device la vista principal no expone un
+    corazón de favorito prominente (el estado de favorito ya quedó cubierto
+    exhaustivamente en la corrida .63); el foco de esta re-confirmación fue
+    la regla Back->origen, que PASA. Evidencia:
+    reports/azteca/2026-09-18_17-25-navegacion/{logs/SC-MULTI-ENTRY-SHOW-01.log,videos/SC-MULTI-ENTRY-SHOW-01.mp4,screenshots/SC-MULTI-01-01..12-*.jpg}
+    🔍 Nota aparte (no bug, hallazgo de arquitectura): en este device/build,
+    los ítems del riel EN VIVO y "Continuar viendo" de Home llevan
+    DIRECTO al Player (Live o VOD resume), no a una ShowPage intermedia --
+    a diferencia de items entrados desde Discover/Search que sí llevan a
+    ShowPage primero. Por eso no se pudo usar "Entrada 3: desde el
+    hero/riel de Home" tal como pedía el escenario originalmente -- ese
+    riel específico no tiene una ShowPage que visitar antes del contenido.
+  title: Entrar al mismo show desde 3 puntos distintos mantiene estado consistente y Back vuelve al origen correcto
+  area: [core-ui]
+  severity: minor
+  screen: ShowPage (entrado desde Home hero, Discover, Search)
+  steps:
+    - "Entrada 1: desde el hero/riel de Home, entrar a un show -- anotar el estado del corazón de favorito, presionar Back, confirmar que vuelve a Home en el riel de origen"
+    - "Entrada 2: buscar el MISMO show por Search, entrarlo desde ahí -- confirmar que el estado del corazón es el mismo que en la entrada 1 (consistente), presionar Back, confirmar que vuelve a SearchPage (no a Home)"
+    - "Entrada 3: si el show aparece en Discover, entrarlo desde ahí -- mismo chequeo de estado + Back debe volver a Discover"
+  expected:
+    - El estado de favorito es el mismo sin importar desde dónde se entre (es el mismo show, mismo dato)
+    - Back siempre vuelve a la pantalla de ORIGEN real desde donde se entró, no siempre a Home a ciegas
+  logs_watch:
+    - Confirmar por log el screen_name antes de entrar y después del Back -- deben coincidir
+
+- id: SC-SEARCH-XSS-RENDER-01
+  status: >
+    CONFIRMADO -- corrida CORRIDA-EXTENDIDA-device63-20260915 contra
+    192.168.1.63 (device distinto al habitual .186, primera corrida de
+    este escenario). Caso `<script>alert(1)</script>` (25 chars): 25/25
+    caracteres confirmados por log (`Lit_<char>`), se muestra LITERAL en
+    el campo de búsqueda ("d<script>alert(1)<..." visible, cortado solo
+    por el ancho del cuadro, captura 26) -- sin ejecución, sin alert, sin
+    romper el layout de la pantalla. Caso `<b>test</b>` (11 chars): 11/11
+    confirmados. 0 excepciones BrightScript en total durante ambos casos.
+    Sin efecto sobre los resultados mostrados más allá de lo esperado (la
+    grilla de resultados no cambia de comportamiento por el contenido del
+    query).
+  title: Buscar con HTML/script no rompe el render ni se interpreta como código
+  area: [core-ui]
+  severity: minor
+  screen: SearchPage
+  steps:
+    - "Escribir en el campo de búsqueda (con scripts/roku-type.js): <script>alert(1)</script>"
+    - Confirmar cómo se muestra ese texto en el campo/resultado de búsqueda
+    - Repetir con: <b>test</b>
+  expected:
+    - El texto se muestra LITERAL (como caracteres visibles, ej. "<script>alert(1)</script>" tal cual), nunca interpretado/ejecutado ni rompiendo el layout de la pantalla
+    - Sin crash, sin excepción BrightScript
+  logs_watch:
+    - Sin excepciones BrightScript no manejadas
+    - Confirmar por log (Lit_ characters) que el string completo se tipeó tal cual, para descartar que una diferencia visual se deba a que el teclado no escribió bien

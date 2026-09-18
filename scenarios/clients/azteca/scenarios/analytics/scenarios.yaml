@@ -1,0 +1,306 @@
+# Escenarios compartidos (Core) — Analytics GA4: parámetros `plataforma` y `category`
+#
+# Ver scenarios/shared/README.md para la convención de `area`/`severity`/`status`.
+#
+# AUTOMATIZACIÓN DISPONIBLE (2026-09-17): scripts/test-vod-analytics.ps1 es un
+# test de regresión para un defecto conocido del Player SDK en la ruta de
+# preroll/ads (RAF): si el player no observa RAFPlayerTask.currentState, faltan
+# eventos clave de analytics (buffering, video_views) y la escena nunca llega
+# a "playing". Complementa esta batería (que valida `plataforma`/`category`)
+# con un chequeo distinto: que el arranque real con ads se reporte. Correr con:
+#   pwsh scripts/test-vod-analytics.ps1 -RokuHost 192.168.1.186
+# Pendiente: primera corrida real post-integración.
+#
+# Origen: validación del PR https://github.com/mediastream/ott-next-core-roku-tv/pull/173
+# (Monday, tarea "Solicitud de agregar parámetros a GA4 category y plataforma",
+# abierta desde abril 2026, rebotada el 28-jul por falta de credenciales GA4,
+# root-cause diagnosticado por el usuario mismo el 14-sep: `platform` vs
+# `plataforma` en la key equivocada, `categories` vs `category` en plural).
+#
+# Combina las 2 tablas de casos QA del ticket:
+#   - Tabla del PR-173 (QA-01..QA-08, [qa-bot:pr-173]) -- la más específica,
+#     describe el fix real: plataforma = valor FIJO "TV Azteca En Vivo Roku"
+#     (nombre de la OTT + "Roku"), category = key singular.
+#   - Tabla de "Next Bot" (QA-01..QA-10, posterior) -- fraseo más genérico
+#     ("dispositivo real" en vez de un string fijo, categorías múltiples
+#     separadas por coma). Puede ser una versión más nueva/auto-generada
+#     del mismo requerimiento, o aplicar a un ticket más amplio
+#     multi-plataforma -- NO asumir cuál es la correcta si divergen en la
+#     práctica, documentar la discrepancia tal cual se observe.
+#
+# PRERREQUISITO CRÍTICO (mismo bloqueo del 28-jul): sin `ga4ApiSecret` y
+# `ga4MeasurementId` cargados en appConfig.json, el nodo de analytics
+# (`m.global.RSG_analytics`) nunca se crea y NINGÚN evento se emite -- si
+# esto vuelve a pasar, todos los escenarios de acá abajo van a fallar por
+# la misma causa raíz de siempre, no por un bug nuevo. Confirmar PRIMERO
+# (antes de correr cualquier escenario) que aparecen líneas
+# `GA4 Initialize` / `ROKU_GA4` en el log -- si no aparecen, PARAR y
+# reportar el mismo bloqueo, no seguir validando casos a ciegas.
+#
+# Metodología: esto es casi 100% validable por LOG -- cada evento GA4 es
+# un JSON completo visible en el telnet log (`ROKU_GA4 INFO : POST {...}`)
+# con todos los parámetros. Rara vez hace falta captura para esto -- el
+# log ES la evidencia principal, no un sustituto del log.
+
+- id: AN-01
+  status: >
+    CONFIRMADO PASA -- corrida VALIDACION-PR173-20260915 contra .186.
+    Evento player_ready real ("Lotería del Crimen"):
+    `"plataforma":"TV Azteca En Vivo Roku"`, SIN key `platform` en el
+    payload. Fix correcto. Evidencia: telnet.log línea 959.
+  title: "player_ready (VOD): plataforma correcta, sin key 'platform' residual"
+  area: [core-network]
+  severity: blocker
+  screen: Player (VOD)
+  steps:
+    - Reproducir un VOD
+    - Capturar el evento `player_ready` completo del log (`ROKU_GA4 INFO : POST {...}`)
+  expected:
+    - 'El JSON del evento trae `"plataforma":"TV Azteca En Vivo Roku"` (o el valor real que identifique el dispositivo, si la tabla de Next Bot aplica -- documentar cuál de las dos formas se observa)'
+    - NO debe existir la key `platform` (sin la "a" final) en el payload -- era el bug original
+  logs_watch:
+    - 'Buscar el evento exacto `"name":"player_ready"` y extraer su objeto `params` completo'
+  visual_check: null
+
+- id: AN-02
+  status: >
+    🟡 PARCIAL -- la MECÁNICA del fix funciona (key `category` singular
+    presente, SIN key `categories` residual -- eso está bien). PERO el
+    VALOR es sospechoso: llegó `"category":"CMS, Lotería del Crimen"`.
+    Confirmado contra la propia ShowPage de este show (ver
+    reports/azteca/navegacion/CORRIDA-FORMAL-20260915-2200/30-fav-toggled-loteria.jpg)
+    que el género real es "ACCIÓN, CRIMEN, HORROR" -- NO coincide. El
+    valor real repite el título del show dentro del campo de categoría en
+    vez de traer el género real. Reproducido igual en video_views (ver
+    AN-03), 3/3 ocurrencias idénticas -- no es un glitch aislado.
+    HALLAZGO A REPORTAR: el fix de la KEY está bien, pero el VALOR que
+    arma la función de categoría parece tomar el dato equivocado del
+    backend (o concatenar mal "CMS" + título en vez de los géneros
+    reales). Evidencia: telnet.log línea 959.
+
+    RECONFIRMACIÓN 2026-09-15 (noche, 2do show) -- NO SE REPITE IGUAL:
+    con "La Granja VIP Segunda Temporada" (género real confirmado en su
+    propia ShowPage: "EXTERIOR, DEPORTES Y RECREACIÓN, JUEGOS" -- ver
+    captura `11-showpage-granja.jpg`), el `player_ready` real capturado
+    trajo `"category":"not-set"` -- NO repitió el patrón "CMS, Título" de
+    Lotería del Crimen, sino que directamente no trae el género real (ni
+    tampoco el bug del título). Confirma que el bug de category es un
+    problema GENERAL del fix (el valor real casi nunca llega bien), pero
+    su síntoma concreto VARÍA por show/contenido: a veces concatena mal
+    "CMS + título" (Lotería del Crimen), a veces cae en "not-set" a pesar
+    de que el show sí tiene géneros reales asignados (La Granja VIP). Se
+    intentó primero con "Exatlón México/Décima Temporada" (género real
+    "AVENTURA, JUEGOS", también visible en ShowPage) pero sus 2 episodios
+    probados fallaron para reproducir (`code:403 reason:"Forbidden"` en
+    `MediaStreamPlayerAPI.brs(68)` -- error de contenido/DRM, no
+    relacionado a category) -- sí alcanzaron a emitir `player_ready` antes
+    de fallar, y esos también trajeron `category:"not-set"` (ver
+    telnet.log líneas 171, 294 de esta corrida). Evidencia completa:
+    `reports/azteca/analytics/RECONFIRMACION-CATEGORY-20260915-2300/telnet.log`
+    (línea 462 para el player_ready real de La Granja VIP).
+  title: "player_ready (VOD): category en singular, sin key 'categories' residual"
+  area: [core-network]
+  severity: blocker
+  screen: Player (VOD)
+  steps:
+    - Mismo evento `player_ready` de AN-01 (no repetir la reproducción, reusar la misma corrida)
+    - Revisar el parámetro de categoría
+  expected:
+    - 'Existe la key `"category"` (singular) con el nombre real de la categoría del contenido reproducido'
+    - NO debe existir la key `categories` (plural) -- era el bug original (GA4 la descarta en silencio si la dimensión está registrada en singular)
+  logs_watch:
+    - 'Mismo evento player_ready que AN-01 -- confirmar `category` presente y `categories` ausente'
+  visual_check: null
+
+- id: AN-03
+  status: >
+    🟡 PARCIAL -- player_ready y video_views confirmados (mismo evento de
+    "Lotería del Crimen" cubre esto, es un episodio de Show): ambos con
+    `plataforma` correcto y el mismo `category:"CMS, Lotería del Crimen"`
+    sospechoso de AN-02. `screen_view` de la entrada al Player específica
+    de este episodio no se aisló explícitamente en esta corrida (se
+    cortó antes) -- pendiente confirmar ese evento puntual, aunque los
+    screen_view generales ya vistos (Home/Discovery/Search) sí tienen
+    plataforma correcto.
+
+    RECONFIRMACIÓN 2026-09-15 (noche, 2do show) -- ✅ COMPLETO con
+    "La Granja VIP Segunda Temporada" (episodio real de Show, video 209,
+    "Se los voy a aventar a la cama..."): los 3 eventos capturados en la
+    misma ventana de tiempo -- `screen_view` (screen_name:"Player",
+    telnet.log línea 450), `player_ready` (línea 462), `video_views`
+    (línea 656) -- los 3 con `plataforma:"TV Azteca En Vivo Roku"`
+    correcto, y los 3 con `category:"not-set"` (NO el género real
+    "Exterior, Deportes y Recreación, Juegos" visto en su ShowPage). Bonus
+    no pedido: también se capturó `video_VOD_progress` 2 veces (25% y 50%,
+    ver AN-07) con el mismo patrón -- plataforma correcto, category
+    "not-set". Confirma consistencia interna del bug (todos los eventos de
+    una misma reproducción coinciden entre sí), aunque el valor en sí
+    sigue sin ser el género real.
+  title: "Episodio de Show: screen_view + player_ready + video_views, los 3 con plataforma y category correctos"
+  area: [core-network]
+  severity: major
+  screen: ShowPage -> Player (episodio)
+  steps:
+    - Reproducir un episodio de un Show (no un VOD suelto)
+    - 'Capturar los 3 eventos en el log -- screen_view (al entrar al player), player_ready, video_views'
+  expected:
+    - Los 3 eventos traen `plataforma` correcto (mismo criterio que AN-01)
+    - Los 3 eventos traen `category` con el nombre real de la categoría del episodio (mismo criterio que AN-02)
+  logs_watch:
+    - 'Los 3 nombres de evento deben aparecer en la ventana de tiempo de esta reproducción, cada uno con su propio params completo'
+  visual_check: null
+
+- id: AN-04
+  status: "NO CORRIDO en esta sesión -- se cortó antes de llegar a este caso. Pendiente."
+  title: "VOD sin categoría asignada: category llega como 'not-set', reproducción normal"
+  area: [core-network]
+  severity: major
+  screen: Player (VOD sin categoría)
+  steps:
+    - Identificar y reproducir un VOD que NO tenga categoría asignada (revisar vía Discover/API si hace falta para encontrar uno)
+    - Capturar `player_ready`
+  expected:
+    - 'category llega como `"not-set"` (texto literal), nunca vacío, nunca ausente la key por completo'
+    - La reproducción funciona con normalidad (sin error ni bloqueo por la falta de categoría)
+  logs_watch:
+    - 'player_ready con category:"not-set" explícito'
+  visual_check: captura si hace falta confirmar que el VOD elegido realmente no tiene categoría visible en su ShowPage
+
+- id: AN-05
+  status: "NO CORRIDO en esta sesión -- se cortó antes de llegar a este caso. Pendiente."
+  title: "Live: plataforma correcta, category NO se envía en absoluto"
+  area: [core-network]
+  severity: major
+  screen: Player (Live)
+  steps:
+    - Reproducir un canal en vivo
+    - Capturar `player_ready` y `video_live_watch_count`
+  expected:
+    - Ambos eventos con `plataforma` correcto
+    - 'NINGUNO de los 2 debe traer la key `category` (a propósito, es Live -- distinto de AN-04 donde category SÍ existe pero vale "not-set")'
+  logs_watch:
+    - 'Confirmar ausencia total de la key category (no solo vacía) en player_ready y video_live_watch_count de Live'
+  visual_check: null
+
+- id: AN-06
+  status: >
+    ✅ CONFIRMADO PASA -- los 3 sub-casos con `plataforma:"TV Azteca En
+    Vivo Roku"` correcto, sin duplicar/dejar otra key de plataforma:
+    login_banner (líneas 221, 600), login_success (líneas 396, 835),
+    login_error (línea 692). Ninguno trae `category` (esperable, sin
+    contenido de video asociado -- el escenario no lo exige explícito
+    pero es consistente con AN-08).
+  title: "Login (banner, éxito, error): plataforma correcta en los 3 momentos"
+  area: [core-network]
+  severity: major
+  screen: LoginRegPage -> LoginWithPasswordView
+  steps:
+    - "Sub-caso A (banner): entrar a la pantalla de login, capturar el evento de banner de login (login_banner o equivalente)"
+    - "Sub-caso B (éxito): loguear con credenciales válidas, capturar login_success"
+    - "Sub-caso C (error): loguear con credenciales inválidas, capturar login_error"
+  expected:
+    - Los 3 eventos traen `plataforma` correcto, sin duplicar información de plataforma en otra key
+  logs_watch:
+    - 'login_banner (o el nombre real del evento de banner, confirmar cuál es), login_success, login_error -- los 3 con plataforma correcto'
+  visual_check: null
+
+- id: AN-07
+  status: >
+    ✅ CONFIRMADO 2026-09-15 (noche, corrida de reconfirmación de
+    category con "La Granja VIP Segunda Temporada", video corto de 2:07 --
+    se pudo esperar en tiempo real sin necesidad de scrub). 2 ocurrencias
+    de `video_VOD_progress` capturadas (video_percent "25%" y "50%"),
+    ambas con `plataforma` y `category` IDÉNTICOS al `player_ready` de la
+    misma reproducción (plataforma correcta, category:"not-set" -- ver
+    AN-02/AN-03 para el detalle del hallazgo de category). Evidencia:
+    reports/azteca/analytics/RECONFIRMACION-CATEGORY-20260915-2300/telnet.log.
+  title: "video_VOD_progress: mismos valores de plataforma y category que player_ready"
+  area: [core-network]
+  severity: major
+  screen: Player (VOD)
+  steps:
+    - Dejar un VOD reproduciendo hasta que se dispare `video_VOD_progress` (puede tardar, ver umbral real en el código/log de otras corridas si se conoce)
+  expected:
+    - 'plataforma y category del evento video_VOD_progress coinciden EXACTO con los del player_ready de la misma reproducción (mismo contenido, mismos valores)'
+  logs_watch:
+    - 'Comparar params de video_VOD_progress contra el player_ready inicial de la misma sesión de reproducción'
+  visual_check: null
+
+- id: AN-08
+  status: >
+    ✅ CONFIRMADO PASA -- screen_view de Home, Discovery, Search, Login y
+    "Register with Email" (5 pantallas, más que el mínimo pedido) todos
+    con `plataforma:"TV Azteca En Vivo Roku"` correcto y
+    `category:"not-set"` explícito (nunca ausente ni vacío). 18
+    ocurrencias de category:"not-set" en total en la corrida, todas
+    consistentes.
+  title: "Navegación sin reproducir (Home/Categorías/Búsqueda): screen_view con plataforma correcto y category not-set"
+  area: [core-network]
+  severity: minor
+  screen: HomePage / DiscoverPage / SearchPage
+  steps:
+    - Navegar entre Home, Discover (Categorías) y Search SIN reproducir ningún contenido
+    - Capturar los eventos `screen_view` de cada pantalla visitada
+  expected:
+    - 'Todos los screen_view traen plataforma correcto y no vacío'
+    - 'category en "not-set" en todos (no hay contenido de video asociado a estas pantallas)'
+  logs_watch:
+    - 'screen_view de Home, Discovery y Search -- confirmar plataforma y category:"not-set" en los 3'
+  visual_check: null
+
+- id: AN-09
+  status: >
+    NO CORRIDO en esta sesión -- se cortó antes de buscar un contenido
+    multi-categoría. Pendiente. NOTA CRUZADA: el valor "CMS, Lotería del
+    Crimen" visto en AN-02 SÍ tiene el formato "algo, algo" separado por
+    coma dentro de un solo campo `category` -- eso es consistente con la
+    MECÁNICA que pide este caso (un campo, coma-separado), pero el
+    contenido de esos dos valores concatenados no parece ser 2 categorías
+    reales (uno es un show de 1 sola categoría real: "Acción, Crimen,
+    Horror"). Podría ser la misma causa raíz que AN-02, no un caso
+    aparte -- confirmar con un show que tenga categorías múltiples reales
+    para aislarlo bien.
+
+    RECONFIRMACIÓN 2026-09-15 (noche) -- se encontraron y confirmaron 2
+    shows con géneros múltiples REALES en su propia ShowPage: "Exatlón
+    Décima Temporada" ("Aventura, Juegos" -- 2 géneros) y "La Granja VIP
+    Segunda Temporada" ("Exterior, Deportes y Recreación, Juegos" -- 3
+    géneros, capturado en `11-showpage-granja.jpg`). PERO en ninguno de
+    los 2 el evento GA4 real reflejó esos géneros múltiples -- ambos
+    dieron `category:"not-set"` en player_ready/video_views (ver AN-02).
+    Es decir: **no se puede confirmar ni refutar el formato "coma-
+    separado en un campo" que pide este caso, porque el valor de category
+    no está llegando con NINGÚN género real todavía** -- el bug de AN-02
+    bloquea por completo la validación de este caso. Sigue pendiente
+    hasta que category traiga el/los género(s) real(es) de al menos un
+    show (con 1 o más géneros) para recién ahí poder juzgar el formato.
+  title: "Contenido con MÚLTIPLES categorías: se reportan todas separadas por coma en un solo campo (Next Bot QA-09)"
+  area: [core-network]
+  severity: minor
+  screen: Player o ShowPage (contenido multi-categoría)
+  steps:
+    - Encontrar un contenido/pantalla con más de una categoría asociada (revisar en Discover/API si hace falta)
+    - Capturar el evento correspondiente y revisar el campo de categoría
+  expected:
+    - 'Las categorías múltiples llegan en el MISMO campo `category`, con los nombres separados por coma (ej. "Drama, Comedia"), no como un array ni como keys repetidas'
+  logs_watch:
+    - Confirmar formato exacto del valor cuando hay 2+ categorías reales
+  visual_check: null
+
+- id: AN-DISCREPANCIA-PLATAFORMA-01
+  status: >
+    RESUELTO A FAVOR DEL PR -- en todos los eventos capturados (login,
+    screen_view, player_ready, video_views), `plataforma` fue SIEMPRE el
+    string fijo idéntico "TV Azteca En Vivo Roku", nunca varió según
+    pantalla. Coincide con la redacción del PR-173. No hace falta
+    escalar esto como ambigüedad real -- el comportamiento es consistente.
+  title: "Meta-check: ¿'plataforma' es un string FIJO o refleja el dispositivo real? (las 2 tablas del ticket dicen cosas distintas)"
+  area: [core-network]
+  severity: minor
+  screen: N/A (análisis transversal de todos los eventos capturados en esta corrida)
+  steps:
+    - Con todos los eventos ya capturados en AN-01 a AN-08, revisar si el valor de `plataforma` es SIEMPRE idéntico (string fijo "TV Azteca En Vivo Roku", como dice el PR) o si varía/podría variar según el dispositivo (como sugiere la redacción de la tabla de Next Bot, "refleja el dispositivo real")
+  expected:
+    - Documentar cuál de las 2 interpretaciones coincide con el comportamiento real -- esto no es un bug a resolver por el agente, es una ambigüedad del ticket que hay que reportar de vuelta para que el equipo lo aclare con Analytics (ya el propio ticket dice "Pendiente de confirmar con Analytics" sobre category singular/plural -- esta es una ambigüedad hermana, sobre plataforma)
+  logs_watch: []
+  visual_check: null

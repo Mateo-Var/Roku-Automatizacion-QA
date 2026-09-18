@@ -1,0 +1,606 @@
+# Escenarios de Player -- app de REFERENCIA del Core ("Next" / OTTNext_CLIENT_APP)
+#
+# IMPORTANTE: esto NO es un cliente real que paga por el servicio. "Next" es
+# la app genérica/demo que Mediastream usa como referencia del Core cuando
+# no hay un build de cliente específico cargado en el device -- estos 9
+# casos se validaron contra ese build genérico (build 1.22.202605260,
+# device 192.168.1.63) durante la sesión 2026-09-16/17, en el contexto de
+# la validación del PR-174 (Continue Watching / Back) y los botones de fin
+# de episodio (Up Next), NO contra "TV Azteca En Vivo".
+#
+# Separado del resto de la batería de player (que sí es 100% Azteca, ver
+# scenarios/clients/azteca/scenarios/player/scenarios.yaml) el 2026-09-18,
+# al reorganizar el proyecto para soportar múltiples clientes -- antes
+# vivía mezclado en scenarios/shared/player/scenarios.yaml.
+#
+# Útil como punto de partida/comparación cuando se valide el mismo
+# comportamiento en un cliente real: si un cliente muestra un resultado
+# distinto acá documentado para "Next", es una buena señal de que el
+# comportamiento es específico de la personalización de ese cliente y no
+# un bug del Core.
+
+# --- Up Next: botones "Siguiente episodio" / "Ver créditos" (fin de episodio VOD) ---
+#
+# Contexto (pedido explícito del usuario, 2026-09-17): en shows VOD con más
+# de un episodio, a ~5 segundos del final aparecen dos botones superpuestos
+# al video: "Siguiente episodio" (NEXT_EP) y "Ver créditos"/"Seguir viendo
+# créditos" (CREDITS). Hay 3 comportamientos a validar según qué haga el
+# usuario, más 1 caso de borde (última temporada/episodio, donde NEXT_EP no
+# debe existir porque no hay siguiente). NO se fusionaron en un solo flow
+# porque cada uno necesita llegar al final de un episodio DISTINTO -- no son
+# reducibles a una sola reproducción, solo comparten el mismo setup.
+#
+# Herramienta para llegar al final sin mirar el video en tiempo real:
+# `scripts/smart-seek-agent.js <ruta-al-telnet.log>` -- ya validado en
+# sesión 2026-09-11, avanza por niveles escalonados de Fwd+Select según el
+# tiempo restante reportado en el log, y deja de tocar nada por debajo de
+# ~2 minutos restantes (los botones de Up Next aparecen recién a ~5s del
+# final, no antes -- no hay que forzar nada ahí, solo dejar correr en
+# tiempo real esos últimos segundos). Requiere tener el telnet ya
+# conectado y volcando a un archivo de log antes de arrancarlo.
+#
+# Cálculo de duración/posición: usar `query/media-player` (ECP) o el log de
+# telnet (duration/position del player) para saber cuánto falta, en vez de
+# asumir un tiempo fijo -- la duración varía por episodio.
+
+- id: SC-UPNEXT-NEXTEP-01
+  status: >
+    CONFIRMADO 2026-09-17 (continuación 6, device .63, login activo).
+    "Lotería del Crimen" Temporada 1, Capítulo 2 ("El Huérfano") avanzado
+    con ráfagas de Fwd+Select hasta posición 2891.5s de 2896.6s de
+    duración (remaining ~5.1s, ventana de botones ya documentada). Un
+    Select en ese punto (posición AÚN NO llegó al final real) disparó de
+    inmediato `RAFPlayerTask: mid-roll ads` -> `seek to 2890` ->
+    transición directa a un episodio NUEVO (`episode/68ccea03378204b6618ff84c.json`,
+    Capítulo 3, `playVideo : Seek parameter = 0`) -- cambio inmediato de
+    contenido sin esperar el fin real del episodio actual, consistente con
+    presionar "Siguiente episodio". Repetido una 2da vez con Capítulo 3 ->
+    Capítulo 4 con el mismo patrón (Select cerca del final -> episodio
+    nuevo inmediato). Sin excepciones BRIGHTSCRIPT. Nota de limitación:
+    las capturas de Roku no muestran el frame de video ni el overlay de
+    botones (política ya documentada, frame negro) -- la confirmación es
+    100% por log (cambio de video_id/episode antes del fin real
+    reportado por duration). Evidencia:
+    reports/azteca/player/CORRIDA-device63-20260917/telnet.log (líneas
+    ~17550-17600 y ~17800-17850 aprox.).
+  title: "Botones de fin de episodio: presionar 'Siguiente episodio' cambia al episodio que sigue"
+  area: [player, core-network]
+  severity: major
+  screen: Player, últimos ~5s de un episodio VOD (no el último de la temporada)
+  steps:
+    - Reproducir un episodio VOD que NO sea el último de su temporada/show (para que exista un "siguiente" real)
+    - Usar `scripts/smart-seek-agent.js` (con telnet ya conectado a un log) para avanzar hasta cerca del final, sin pasarse
+    - Cuando queden ~5s, confirmar por UI/log que aparecen los dos botones ("Siguiente episodio" y "Ver créditos")
+    - Con foco en "Siguiente episodio", presionar Select
+  expected:
+    - La app cambia inmediatamente al episodio siguiente (no espera a que termine el actual), arrancando su reproducción desde el inicio
+  logs_watch:
+    - Cambio de `video_id`/`playback_id` en los eventos de analytics, coincidiendo con el episodio siguiente esperado (no uno salteado ni el mismo)
+    - Sin excepciones de BrightScript en la transición
+  visual_check: captura mostrando los dos botones antes de seleccionar, y captura del nuevo episodio arrancando
+
+- id: SC-UPNEXT-CREDITS-01
+  status: >
+    INTENTADO SIN ÉXITO otra vez, 2026-09-17 (continuación 7, device .63)
+    -- técnica corregida aplicada exactamente como se pidió, sigue siendo
+    limitación de MÉTODO, no bug de la app. 4 intentos totales acumulados
+    ahora (2 de la continuación 6 + 2 de esta sesión), todos terminan en
+    NEXTEP.
+
+    Técnica de esta sesión: avance en bloques manuales x5/x1 (sin usar el
+    modo automático completo de `smart-seek-agent.js` -- ver hallazgo
+    nuevo abajo sobre por qué), deteniendo TODO input una vez alcanzado
+    remaining ~150-160s, y de ahí en adelante monitoreo 100% pasivo vía
+    `query/media-player` (ECP) cada 8-10s, CERO keypresses, hasta
+    remaining <=20s. A remaining=15s una captura confirmó pantalla
+    negra (sin overlay visible todavía, esperado). A remaining=6.2s se
+    envió Right (para mover foco fuera del default asumido) + Select
+    ~300ms después -- el log mostró que el evento `right` llegó a
+    `MediaStreamPlayer` (el player normal), NUNCA a `UpnextOverlay` --
+    es decir, el overlay de botones TODAVÍA NO había aparecido en el
+    momento exacto de enviar la tecla, y para cuando `Select` llegó
+    (~2s después por el round-trip de ECP+poll), el contenido ya había
+    llegado a su fin real y el Select fue tomado como confirmación del
+    autoplay/NEXTEP por defecto. CONCLUSIÓN: la ventana real en la que
+    el overlay acepta navegación explícita hacia "Ver créditos" es más
+    angosta de lo documentado originalmente (posiblemente 2-3s reales,
+    no 5s) y el round-trip de ECP (keypress HTTP + lectura de log) de
+    este agente (~1-2s por acción) es demasiado lento para reaccionar
+    DENTRO de esa ventana una vez que aparece -- por diseño no hay forma
+    de "ver" el overlay aparecer (las capturas nunca muestran overlays de
+    video en tiempo real, y el log no emite una línea explícita de
+    "overlay shown", solo se infiere por los `onKeyEvent` que S~llegan a
+    `UpnextOverlay` en vez de `MediaStreamPlayer`).
+
+    HALLAZGO NUEVO no documentado antes (relevante para futuros intentos
+    y para otros escenarios que usen `smart-seek-agent.js` cerca del
+    final): el modo automático completo del script (dejarlo correr sin
+    supervisión hasta que él mismo decida frenar en la `STOP_TOUCHING_THRESHOLD`)
+    causó 2 problemas nuevos en esta sesión que NO estaban documentados:
+    (a) su lógica de "recuperación por posición estancada" (3 lecturas
+    iguales seguidas -> Select de recuperación) puede disparar un Select
+    DENTRO de la ventana de botones si el estancamiento coincide con el
+    tramo final, causando NEXTEP no intencional (esto costó 2 episodios
+    completos en esta sesión); (b) en un caso el episodio llegó a
+    `finished`->`stopped`->`exiting playContentWithAds()` y la carga del
+    siguiente episodio quedó con el spinner visible sin progreso aparente
+    por más de 3 minutos reales (`query/media-player` reportando
+    `state="close"` sostenido) -- un `Back` sacó la app limpiamente a Home
+    sin crash, así que NO se puede confirmar como bug real (pudo haber
+    seguido cargando si se esperaba más), pero es un punto a vigilar en
+    una futura sesión con más presupuesto de tiempo (dejarlo sin tocar
+    5+ minutos reales para confirmar si realmente cuelga o solo es lento).
+    Por estos 2 hallazgos, la recomendación para la próxima sesión es NO
+    usar el modo automático de `smart-seek-agent.js` sin supervisión
+    activa cerca del final (usar avance manual con chequeo entre cada
+    toque, como se hizo en el 2do intento de esta sesión, que sí llegó
+    limpio hasta remaining=150s sin incidentes).
+
+    Recomendación concreta para reintentar: en vez de mandar
+    Right+Select como una sola acción cuando se estima que faltan ~5-6s,
+    mandar Right SOLO (sin Select) repetidas veces cada ~1s empezando
+    ANTES de lo estimado (ej. desde remaining=10s), y recién confirmar
+    con Select cuando el LOG confirme un `onKeyEvent` recibido por
+    `UpnextOverlay` (no por `MediaStreamPlayer`) -- eso es la única señal
+    fiable de que el overlay ya está activo y aceptando navegación. Sigue
+    sin ser un bloqueo de la app, es una limitación de timing del método
+    del agente (latencia ECP + falta de señal explícita de "overlay
+    shown" en el log).
+
+    **CIERRE DEFINITIVO 2026-09-17 (continuación 8, device .63) -- 4to y
+    ÚLTIMO intento, SIGUE SIN LOGRARSE, se cierra el caso como limitación
+    de método (no bug de la app).** Se usó "Lotería del Crimen" (mismo
+    show ya validado), episodio nuevo "La Tóxica" vía
+    `scripts/smart-seek-agent.js` en modo automático completo (el script
+    ya frena solo por debajo de 120s restantes, sin necesidad de
+    supervisión manual del avance grueso). Dos corridas del script sobre
+    dos episodios distintos:
+    - 1er episodio ("La Tóxica"): el script se adelantó más de lo
+      esperado -- en el tick 6 (con remaining reportado de 942s, lejos
+      del final) el `playback_id` cambió solo, saltando a un episodio
+      completamente distinto sin que el remaining estimado lo
+      justificara. Hallazgo: el contenido tiene mid-rolls muy frecuentes
+      (cada ~600s: seek a 610, 1210, 1810, 2410...) y en algún punto la
+      duración real jugable resultó menor a la `duration` reportada por
+      el player, causando un NEXTEP prematuro sin que el agente lo
+      pidiera -- variante nueva del mismo problema de fondo ya
+      documentado (el script no tiene forma de distinguir "casi al
+      final real" de "duration mal reportada por los mid-rolls").
+    - 2do episodio (autoplay del anterior): el script SÍ aterrizó bien
+      esta vez (remaining=45s, dejó de tocar). Al monitorear pasivamente
+      por ECP (`query/media-player`) cada 2-3s como pedía la técnica,
+      se descubrió que la posición quedó **congelada en 2713000ms de
+      2758000ms (remaining~45s) durante más de 2 minutos reales**,
+      con `state="close"` sostenido en el ECP y una captura confirmando
+      el spinner de carga del episodio siguiente detenido en "0%" --
+      **esto reproduce por segunda vez** el hallazgo ya registrado en la
+      continuación 7 ("spinner colgado >3 min"), esta vez con tiempo de
+      espera suficiente (2+ min reales) para subirlo de "a vigilar" a
+      **CONFIRMADO como hallazgo real recurrente** (aunque su severidad
+      exacta -- freeze real vs. simplemente muy lento -- sigue sin
+      determinarse, porque otra vez un `Back` sacó la app limpia a la
+      ShowPage sin crash ni BRIGHTSCRIPT nuevo, sin haber esperado más
+      de 3-5 min para confirmar si eventualmente hubiera cargado). En
+      ningún momento de este intento se pudo siquiera llegar a enviar el
+      Right de prueba -- el episodio nunca llegó a mostrar el overlay de
+      botones de forma estable, se saltó directo a "fin real -> siguiente
+      episodio" antes de que la ventana de observación pudiera actuar.
+    **Conclusión final, con 4 intentos acumulados en 2 sesiones distintas,
+    todos fallidos por la misma familia de causas (ventana angosta +
+    latencia del método + ahora también mid-rolls que distorsionan la
+    estimación de "restante"): se cierra este escenario como NO LOGRADO
+    por limitación de la técnica de automatización disponible, no como
+    bug de la app.** El comportamiento de "Ver créditos" en sí NO se
+    pudo ejercer ni una sola vez en las 4 intentonas, pero tampoco hay
+    ninguna señal de que la app lo maneje mal -- simplemente no se pudo
+    llegar a presionarlo en el instante correcto con las herramientas de
+    este agente (ECP + telnet, sin acceso a video en tiempo real). No se
+    recomienda seguir reintentando con el mismo método; si se retoma en
+    el futuro, haría falta instrumentación adicional (ej. un stream de
+    video real o una señal explícita del Core en el log de "overlay
+    shown") para tener alguna chance real de éxito. Evidencia:
+    reports/azteca/player/CORRIDA-device63-20260917/telnet.log (líneas
+    ~26040-27620 aprox.), capturas 163-166 (163 lista de episodios,
+    164 "La Tóxica" cargando, 165 spinner colgado en "Los Enamorados" a
+    0%, 166 ShowPage tras el Back de recuperación, limpia y sana).
+  title: "Botones de fin de episodio: presionar 'Ver créditos' se queda viendo los créditos y AL TERMINAR igual cambia de episodio"
+  area: [player, core-network]
+  severity: major
+  screen: Player, últimos ~5s de un episodio VOD (no el último de la temporada)
+  steps:
+    - Mismo setup que SC-UPNEXT-NEXTEP-01 (episodio que no sea el último, avanzar con smart-seek-agent.js hasta ~5s del final)
+    - Cuando aparezcan los botones, mover el foco a "Ver créditos" (o la opción equivalente de quedarse viendo) y presionar Select
+    - Esperar a que el video llegue a su fin real (los créditos terminen de reproducirse)
+  expected:
+    - Al elegir "Ver créditos", el video sigue reproduciendo el contenido actual (no corta ni cambia de inmediato)
+    - Una vez que el video efectivamente termina, la app cambia de episodio igual (mismo comportamiento final que si no se hubiera tocado nada)
+  logs_watch:
+    - Ningún cambio de `video_id`/`playback_id` inmediatamente después de seleccionar "Ver créditos" (debe seguir siendo el mismo contenido)
+    - Cambio de `video_id`/`playback_id` recién cuando el player reporta el fin real (evento `ended` o equivalente)
+  visual_check: captura al elegir "Ver créditos" (confirmando que se queda en el mismo video), captura del cambio de episodio al terminar
+
+- id: SC-UPNEXT-AUTO-01
+  status: >
+    CONFIRMADO 2026-09-17 (continuación 6, device .63, login activo).
+    "Lotería del Crimen" Temporada 1, Capítulo 1 ("El Brujo") avanzado con
+    `scripts/smart-seek-agent.js` -- el script se detuvo tocando por
+    debajo del umbral y el episodio llegó a `RAFPlayerTask: state =
+    finished` -> `stopped` -> `exiting playContentWithAds()` SIN ningún
+    `onKeyEvent` de por medio en esa ventana (confirmado revisando el log
+    línea por línea entre el `finished` y la carga del episodio
+    siguiente) -- la app cargó automáticamente
+    `episode/68cceb11509d1b0e5f2ba894.json` (Capítulo 2) con
+    `playVideo : Seek parameter = 0` sin intervención. CONFIRMADO. Nota:
+    las capturas de este momento son negras (política ya documentada, el
+    frame de video/overlay nunca se ve). Evidencia: telnet.log líneas
+    ~16800-16860 aprox., captura 102 (negra, esperado).
+  title: "Botones de fin de episodio: si el usuario no hace nada, al terminar el tiempo cambia de episodio solo"
+  area: [player, core-network]
+  severity: major
+  screen: Player, últimos ~5s de un episodio VOD (no el último de la temporada)
+  steps:
+    - Mismo setup que SC-UPNEXT-NEXTEP-01 (episodio que no sea el último, avanzar con smart-seek-agent.js hasta ~5s del final)
+    - Cuando aparezcan los botones, NO presionar nada -- dejar correr el tiempo restante en tiempo real
+  expected:
+    - Al llegar al fin real del episodio, la app avanza automáticamente al siguiente episodio, sin necesidad de ninguna acción del usuario
+  logs_watch:
+    - Cambio de `video_id`/`playback_id` al momento del fin real del episodio, sin ningún `onKeyEvent` de Select/OK de por medio en esa ventana
+  visual_check: captura de los botones sin foco/selección, captura del episodio siguiente arrancando solo
+
+- id: SC-UPNEXT-LASTEP-01
+  status: >
+    CONFIRMADO 2026-09-17 (continuación 7, device .63, login activo). Show
+    usado: "Lo Que La Gente Cuenta: el podcast" -- confirmado por su propia
+    ShowPage como de "1 TEMPORADAS" (una sola temporada) con "15 VIDEOS",
+    y el episodio listado PRIMERO en la fila "Episodios" (orden
+    descendente confirmado por número de episodio en pantalla: 16, 15, 14,
+    13...) es "Episodio 16: El último adiós" -- efectivamente el último
+    episodio disponible del show completo (no solo de una temporada).
+    Reproducido con `smart-seek-agent.js`/avance manual x2->x1 hasta
+    remaining~150s, luego monitoreo 100% pasivo (cero keypresses) por ECP
+    cada 8s hasta el final real. A remaining=11s Y a remaining=1.8s
+    (2 capturas) la pantalla se mantuvo NEGRA sin ningún overlay/botón
+    visible en ningún momento -- consistente con lo esperado (no existe
+    "Siguiente episodio" real, y a diferencia de SC-UPNEXT-NEXTEP-01/
+    SC-UPNEXT-AUTO-01 con contenido intermedio, acá nunca hubo señal de
+    que un overlay apareciera). Al llegar al fin real, el log mostró
+    `RAFPlayerTask: state = finished` -> `stopped` limpio, y la app volvió
+    directamente a la `ShowPage` del mismo show
+    (`screen_view screen_name:"Show"`, `video_id:"not-set"`) SIN intentar
+    cargar ningún `video_id` inválido ni vacío -- sin BRIGHTSCRIPT ERROR
+    nuevo, sin crash. Captura final confirma ShowPage con foco de vuelta
+    en la tarjeta del Episodio 16 (grilla de episodios intacta). CONFIRMADO:
+    no aparece botón de "Siguiente episodio" en el último episodio, y el
+    comportamiento de fin es volver a ShowPage limpio, no crashear ni
+    intentar cambiar de video. Evidencia:
+    reports/azteca/player/CORRIDA-device63-20260917/telnet.log (líneas
+    ~23189-23681 aprox.), capturas 135-140 (135-138 exploración de
+    ShowPage/episodios, 139 ventana final a remaining=1.8s -- negra,
+    140 ShowPage tras el fin real).
+  title: "Último episodio de la temporada/show: NO debe aparecer el botón 'Siguiente episodio' (no hay a dónde avanzar)"
+  area: [player, core-network]
+  severity: major
+  screen: Player, últimos ~5s del ÚLTIMO episodio disponible
+  steps:
+    - Reproducir explícitamente el último episodio de la última temporada de un show (desde "Ver ahora" del hero si ese es el último, o seleccionándolo directo de la lista de episodios)
+    - Avanzar con smart-seek-agent.js hasta cerca del final
+  expected:
+    - A los ~5s del final, el botón "Siguiente episodio" NO aparece (no existe next real) -- solo debería verse la opción de "Ver créditos" (o ninguna, si créditos tampoco aplica al último episodio; documentar cuál de las dos ocurre)
+    - Al terminar el tiempo, la app NO debe intentar cambiar a un episodio inexistente ni crashear -- el comportamiento esperado es volver al Home/ShowPage o quedarse en una pantalla de fin, a confirmar y documentar
+  logs_watch:
+    - Sin excepciones de BrightScript al llegar al fin del último episodio
+    - Confirmar que no se dispara ningún evento de cambio a un `video_id` inválido/vacío
+  visual_check: captura de la pantalla de fin del último episodio (con o sin botón de créditos, sin botón de siguiente)
+
+# --- Continue Watching / actualización al hacer Back (origen: PR-174) ---
+#
+# Origen: validación del PR https://github.com/mediastream/ott-next-core-roku-tv/pull/174
+# ("[Bug][Roku] Al hacer back en la reproducción no se actualiza el Continue
+# Watching automáticamente"). El ticket original traía 15 casos QA-01..QA-15
+# (ver reports/azteca/continue-watching-pr174/ para la corrida completa con
+# esa granularidad). Acá quedaron reducidos a los 5 casos que representan
+# comportamientos realmente distintos; el resto eran la misma validación
+# repetida en pantallas distintas (grilla de categoría, Discover, ficha del
+# show vs lista de episodios, etc.) -- NO ameritan un escenario aparte salvo
+# que se sospeche una regresión puntual de esa pantalla específica.
+#
+# REGLA CRÍTICA DE METODOLOGÍA (causó 2 falsos negativos en la validación
+# original, NO REPETIR EL ERROR): antes de reproducir cualquier contenido
+# para estos casos, confirmar su DURACIÓN TOTAL (la ficha del show o la
+# tarjeta del episodio suelen mostrar un badge, ej. "3 MINUTOS", "1H 29M").
+# Si el contenido es corto y el tiempo que se lo deja reproducir antes del
+# Back es una fracción grande de esa duración total, el contenido puede
+# llegar a completarse durante la prueba -- ahí es ESPERADO que no aparezca
+# en Continuar Viendo (un contenido terminado no debe aparecer ahí), y eso
+# NO es el bug, es un falso negativo del método. Para SC-CW-01/02/03/05 usar
+# contenido de varios minutos+ y dejarlo correr solo unos segundos (una
+# fracción chica de su duración total) antes del Back. Para SC-CW-04 es al
+# revés: ahí el objetivo ES llegar al final real, por eso conviene un
+# contenido corto (2-4 min) para no tardar mucho en la prueba.
+#
+# Metodología general: log-first (telnet, puerto 8085) -- confirmar
+# VODStartComplete/status "playing" antes de contar tiempo de reproducción,
+# y el estado de Continuar Viendo se valida por captura de pantalla del Home
+# (la barra de progreso es UI, no aparece en el log). Si se toman dos
+# capturas para comparar "antes/después", verificar que no sean el mismo
+# archivo (comparar MD5) antes de confiar en la comparación -- el endpoint
+# de captura puede devolver una imagen cacheada.
+
+- id: SC-CW-01
+  status: >
+    CONFIRMADO 2026-09-17 (continuación 6, device .63, login restaurado
+    -- ver PROJECT_MEMORY.md). Con la cuenta jmatevargas@poligran.edu.co
+    logueada, se reprodujo "Me trata como su gato | Programa del 16 de
+    septiembre 2026" (Acércate a Rocío, duración 01:10:25) por ~8s reales
+    (`VODStartComplete` confirmado), Back inmediato a ShowPage, vuelta a
+    Home. El contenido apareció en la fila "Continuar viendo" del Home
+    (confirmado por captura, badge de tiempo consistente con muy poco
+    avanzado) sin necesidad de relanzar la app. Nota: esta corrida generó
+    ADEMÁS evidencia incidental fuerte de que Continuar Viendo sí
+    funciona para VOD entrado por hero: episodios de "Lotería del Crimen"
+    (Capítulos 1-6, jugados/avanzados durante los escenarios SC-UPNEXT-*
+    de esta misma sesión) y "Lo Que La Gente Cuenta" aparecieron todos en
+    la fila con badges de tiempo restante distintos entre sí, sin
+    duplicados ni entradas rotas. CONFIRMADO. Evidencia: telnet.log
+    líneas ~18600-18700 aprox., capturas 110, 118, 122, 123.
+  title: "Reproducir un contenido dentro de un show, volver con Back al Home, validar que aparece en Continuar Viendo con progreso real"
+  area: [player, core-network]
+  severity: major
+  screen: ShowPage -> Player -> Home
+  steps:
+    - Elegir un contenido (película o episodio) de duración confirmada de varios minutos u horas -- NO usar contenido corto/de prueba sin verificar antes su duración total
+    - Entrar a la ficha del show y reproducirlo (o desde un carrusel del Home)
+    - "Confirmar por log que arrancó realmente (`VODStartComplete` / `status: \"playing\"`)"
+    - Dejarlo correr solo unos segundos (una fracción chica de la duración total del contenido, ver nota de metodología arriba)
+    - Presionar Back
+    - Volver al Home (relanzar el canal si hace falta) y esperar hasta 5 segundos
+  expected:
+    - El contenido aparece en la fila "Continuar Viendo" del Home, con la posición real reflejada (badge de tiempo restante y barra de progreso), en menos de 5 segundos
+  logs_watch:
+    - Timestamp de `VODStartComplete` y de `closePlayer`/evento de Back, para confirmar cuántos segundos reales se reprodujeron antes del Back
+  visual_check: captura del Home mostrando la tarjeta en Continuar Viendo con su badge de progreso
+
+- id: SC-CW-02
+  status: >
+    HALLAZGO 2026-09-17 (continuación 6, device .63, login activo) --
+    posible reincidencia del bug ya conocido de PR-174 (posición no
+    reflejada correctamente), NO un bloqueo del agente. Se seleccionó
+    desde "Continuar viendo" la tarjeta de "Lotería del Crimen |
+    Capítulo 3: El Fotógrafo" (video_id 68ccea03378204b6618ff84c), que
+    en la sesión había sido avanzada hasta ~2890s de ~2896s de duración
+    (99% completado, ver SC-UPNEXT-NEXTEP-01 arriba) antes de saltar al
+    Capítulo 4. La tarjeta en Home mostraba una barra de progreso casi en
+    0% (no cerca del final), y al reingresar el log confirmó
+    `playVideo : Seek parameter = 0` -- arrancó desde el inicio, no desde
+    la posición real alcanzada. Esto es consistente con el bug YA
+    CONOCIDO y documentado (`reports/azteca/continue-watching-pr174/`,
+    referenciado en el `known_issue` de SC-CW-03 más abajo): el backend
+    no está reflejando la posición real avanzada en la UI/reanudación de
+    Continuar Viendo. No se cuenta como una regresión nueva -- es el
+    mismo patrón ya reportado, ahora observado también en este flujo
+    (selección desde Home en vez de desde la ficha del show). Se
+    recomienda una validación dedicada con un contenido de posición
+    intermedia limpia (60-300s, sin pasar por mid-rolls ni transiciones
+    de episodio) para aislar mejor la causa en una futura sesión.
+    Evidencia: telnet.log líneas ~20100-20210 aprox.
+  title: "Reentrar a un contenido con posición ya guardada, validar que retoma desde ahí y no desde cero"
+  area: [player, core-network]
+  severity: major
+  screen: Home (Continuar Viendo) -> Player
+  steps:
+    - Usando un contenido con posición guardada de al menos ~60 segundos (una posición chica de pocos segundos puede no ser concluyente -- ver hallazgo de la corrida original)
+    - Seleccionar ese contenido desde su tarjeta de Continuar Viendo en el Home
+  expected:
+    - La reproducción arranca desde la posición guardada, no desde el inicio
+  logs_watch:
+    - Buscar el parámetro de seek/posición inicial que la app le pasa al player al arrancar (ej. `Seek parameter =`, `position:`) y confirmar que coincide con la posición esperada, no con 0
+  visual_check: null
+
+- id: SC-CW-03
+  status: >
+    REFORZADO 2026-09-17 (continuación 7, device .63, login activo) --
+    reincide el `known_issue` ya documentado, consistente con la corrida
+    original. Contenido usado: "Lo Que La Gente Cuenta | Anteojos."
+    (video_id 68622b5f7a20260e9b374384, duración confirmada 00:40:06).
+    Camino de entrada confirmado por log: desde Buscar, tipeando "Venga La
+    Alegria" (con typo intencional para variar), se seleccionó el tile de
+    episodio individual "Lo Que La Gente Cuenta | Anteojos." de los
+    resultados -- el log saltó DIRECTO de `screen_view screen_name:"Search"`
+    a `screen_view screen_name:"Player"` SIN ningún `screen_name:"Show"`
+    intermedio, confirmando que este tipo de resultado de búsqueda
+    (episodio individual, no la tarjeta del programa) abre el Player
+    directo. Reproducido ~17s reales (`VODStartComplete` confirmado,
+    fracción mínima de los 40 min totales). Back devolvió en UN solo paso
+    a `screen_name:"Search"` (mismo patrón "sin ShowPage intermedia" ya
+    documentado en PROJECT_MEMORY.md). Se salió por Home + relanzamiento
+    en frío del canal (cold start confirmado por `HomePage:Init` fresco)
+    para descartar timing, y en la fila "Continuar viendo" del Home NO
+    apareció ninguna tarjeta de "Anteojos" -- el primer tile de la fila
+    seguía siendo el contenido de la prueba anterior (Episodio 16 de este
+    mismo programa, badge "11 MINUTOS", de SC-UPNEXT-LASTEP-01), es decir
+    el contenido reproducido vía Buscar->Player-directo NUNCA se sumó a
+    Continuar Viendo pese a haber generado reproducción real confirmada
+    por log. Consistente con el `known_issue` ya documentado (backend
+    guarda posición pero UI de Home nunca lo refleja para este flujo de
+    entrada) -- no es una regresión nueva, sigue siendo el mismo bug de
+    PR-174 sin corregir para este camino específico. Evidencia:
+    reports/azteca/player/CORRIDA-device63-20260917/telnet.log (líneas
+    ~23752-24270 aprox.), capturas 142 (búsqueda), 143-144 (Home/Continuar
+    viendo tras relanzamiento, sin la tarjeta esperada).
+  title: "Reproducir un contenido directo desde un resultado de búsqueda (sin pasar por ficha de Show), validar si sincroniza a Continuar Viendo"
+  area: [player, core-network]
+  severity: major
+  screen: Buscar -> Player (directo) -> Home
+  steps:
+    - Buscar un contenido cuyo resultado abra el player DIRECTAMENTE (sin pasar por una ficha de Show intermedia) -- confirmar esto por log/navegación, no asumirlo
+    - Contenido de duración confirmada de varios minutos, reproducir solo unos segundos
+    - Back, volver al Home, esperar hasta 5 segundos (incluyendo relanzamiento en frío si hace falta para descartar timing)
+  expected:
+    - El contenido debería aparecer en Continuar Viendo igual que cualquier otro (mismo comportamiento esperado que SC-CW-01)
+  logs_watch:
+    - Confirmar que el backend efectivamente guardó progreso (buscar el % de avance o la posición en algún evento/log de analytics/beacon) aunque la UI de Home no lo muestre -- eso distingue "no se guardó" de "se guardó pero no se sincroniza a la UI"
+  visual_check: captura del Home
+  known_issue: >
+    Confirmado FALLA 2/2 en la corrida original (2026-09-16 al 2026-09-17,
+    ver reports/azteca/continue-watching-pr174/): el backend guarda la
+    posición real (confirmado por log) pero el contenido nunca aparece en
+    Continuar Viendo, ni siquiera tras relanzamiento en frío. Se observó
+    el mismo patrón de forma incidental en al menos un contenido de grilla
+    de categoría. Este escenario existe para VIGILAR si esto se corrige en
+    una futura versión del fix -- si sigue fallando, no es una regresión
+    nueva, es el bug ya conocido y reportado.
+
+- id: SC-CW-04
+  status: >
+    HALLAZGO 2026-09-17 (continuación 7, device .63, login activo) --
+    posible discrepancia con el "Confirmado PASA en la corrida original"
+    ya anotado en la nota de este mismo caso, necesita reconfirmación con
+    otro contenido antes de subirlo a regresión formal. Contenido usado:
+    "Lotería Del Crimen | Tráiler Oficial." (video_id
+    68622b921226cf58344ce1b5, duración 00:01:00 -- entrado vía Buscar
+    "trailer", que abre el Player DIRECTO sin ShowPage intermedia, mismo
+    patrón de SC-CW-03). Reproducido en tiempo real con CERO keypresses
+    hasta el fin real, confirmado por log: eventos
+    `video_VOD_progress video_percent:"25%"/"50%"/"100%"` seguidos de
+    `RAFPlayerTask: state = finished` -> `stopped`, sin BRIGHTSCRIPT ERROR
+    nuevo (solo los 2 warnings ya conocidos de roku_ads_lib). La app
+    volvió sola a `screen_name:"Search"` sin necesidad de Back manual.
+    Se salió a Home con relanzamiento en frío (cold start confirmado por
+    `HomePage:Init`/`screen_view screen_name:"Home"` fresco) para
+    descartar timing. RESULTADO: el tráiler SÍ aparece en la fila
+    "Continuar viendo", como PRIMER tile (más reciente), con badge
+    "1 MIN" -- es decir, muestra su DURACIÓN TOTAL completa, no "0
+    minutos" ni ninguna indicación visual de que ya se vio/terminó, y no
+    fue excluido de la fila pese a haber llegado a 100% real. No se pudo
+    confirmar visualmente si hay o no una barra de progreso rota bajo la
+    miniatura (a la resolución de captura disponible ningún tile de la
+    fila muestra una barra de progreso distinguible, ni siquiera los que
+    se saben en progreso parcial real como los de "Lotería del Crimen"
+    Temporada 1 con badges de 43-48 minutos) -- limitación de la
+    herramienta de captura, no se puede descartar ni confirmar "barra a
+    medias" con certeza visual. Lo que SÍ es un hecho verificable: el
+    contenido terminado NO desapareció de la fila como el escenario
+    espera ("el comportamiento correcto es que directamente no aparezca
+    ahí"). Diferencia relevante con la corrida original (que dio PASA):
+    esta vez el contenido se reprodujo por el camino "Buscar ->
+    Player directo" (mismo camino de SC-CW-03, que ya tiene su propio bug
+    de sincronización), mientras que no está confirmado por cuál camino
+    se validó originalmente -- es posible que el comportamiento dependa
+    del camino de entrada, igual que CW-02/CW-03. Se recomienda reforzar
+    con un contenido corto reproducido hasta el final DESDE la ficha del
+    show (no desde Buscar) antes de escalar esto a bug confirmado, para
+    aislar si es el mismo bug de "camino de entrada" que ya afecta a
+    CW-02 y CW-03, o un problema nuevo específico de contenido terminado.
+    Evidencia: reports/azteca/player/CORRIDA-device63-20260917/telnet.log
+    (líneas ~24384-24850 aprox.), capturas 146-150 (149-150 muestran la
+    fila de Continuar Viendo con el tráiler como primer tile, badge
+    "1 MIN").
+
+    **REFORZADO 2026-09-17 (continuación 8, device .63) -- CONFIRMADO
+    BUG, NO depende del camino de entrada.** Para aislar la variable
+    "Buscar directo" vs. "ficha del show" pedida, esta vez se reprodujo
+    un contenido corto **entrando explícitamente desde la ShowPage**
+    (Lotería del Crimen -> pestaña "Contenido Exclusivo" -> "Detrás de
+    Cámaras de 'El Cartero'", video_id 68622a8021f8d20e5d2f5bb7, duración
+    real 00:01:49). Confirmado por log que esta vez SÍ hubo
+    `screen_name:"Show"` intermedio antes de `screen_name:"Player"`
+    (a diferencia del patrón "Buscar -> Player directo" de SC-CW-03/04
+    original) -- la variable de camino de entrada quedó correctamente
+    aislada. Reproducido en tiempo real con monitoreo pasivo por ECP
+    (`query/media-player`) hasta el final real, confirmado por log:
+    `video_VOD_progress video_percent:"25%"/"50%"/"100%"` ->
+    `RAFPlayerTask: state = finished` -> `stopped`, sin BRIGHTSCRIPT
+    ERROR nuevo. La app autoplayeó sola el siguiente clip de la playlist
+    de "Contenido Exclusivo" (comportamiento incidental, no pedido por
+    el caso) -- se salió con Back x2 a Home y se relanzó en frío
+    (`HomePage:Init` fresco confirmado) para descartar timing. RESULTADO:
+    el clip "El Cartero" terminado al 100% real **apareció igual como
+    PRIMER tile de "Continuar viendo"** en el Home, con badge "1 MIN"
+    (su duración total, sin ninguna marca de "visto" ni exclusión de la
+    fila) -- **exactamente el mismo patrón ya visto con el tráiler vía
+    Buscar->Player-directo** de la corrida anterior. **CONCLUSIÓN: la
+    discrepancia NO depende del camino de entrada** (se reprodujo tanto
+    entrando por Buscar como por la ficha del show, con Show intermedio
+    confirmado) -- es un comportamiento consistente del contenido
+    terminado en general, no un artefacto del bug de sincronización de
+    posición de CW-02/CW-03 (que sí es específico del camino
+    "Buscar directo"). **Se sube la confianza de este hallazgo a BUG
+    CONFIRMADO**: contenido VOD corto que llega a 100% real NO se excluye
+    de "Continuar viendo" como el escenario espera, independientemente
+    de cómo se haya entrado a reproducirlo -- contradice el "Confirmado
+    PASA" de la corrida original de PR-174 (que probablemente validó con
+    un contenido/condición distinta, o el comportamiento cambió desde
+    entonces). Recomendado escalar como hallazgo real al equipo de Core,
+    ya no como "necesita reconfirmación". Evidencia:
+    reports/azteca/player/CORRIDA-device63-20260917/telnet.log (líneas
+    ~26960-27750 aprox.), capturas 169 (pestaña Contenido Exclusivo en la
+    ficha, confirmando el camino de entrada), 170 (Home tras relanzamiento
+    en frío, "Continuar viendo" con el clip de 1 MIN como primer tile).
+  title: "Reproducir un contenido corto hasta el final real, validar que no queda con la barra a medias en Continuar Viendo"
+  area: [player, core-network]
+  severity: blocker
+  screen: Player -> Home
+  steps:
+    - Elegir un contenido corto (2-4 minutos, para no alargar la prueba) y reproducirlo hasta el FINAL real
+    - Confirmar el final real por log (evento `ended`, o auto-avance al siguiente episodio con cambio de `playback_id`) -- no asumir que terminó solo por el tiempo transcurrido
+    - Presionar Back
+    - Revisar el Home / Continuar Viendo
+  expected:
+    - El contenido terminado NO debe quedar con una barra de progreso a medias en Continuar Viendo -- el comportamiento correcto es que directamente no aparezca ahí (o se marque como visto, según defina Producto), nunca con una barra rota o en 0% junto a otros ítems en progreso real
+  logs_watch:
+    - Evento de fin de reproducción (`ended`) o transición automática al siguiente contenido
+  visual_check: captura de Continuar Viendo confirmando que el contenido no aparece con barra rota
+  note: >
+    Este es el caso CRÍTICO del ticket original: el fix de PR-174 rechaza
+    todo progreso en 0 para evitar el "0 falso" que causaba el bug, por lo
+    que un reseteo legítimo a 0 (contenido terminado) también podría no
+    aplicarse bien. Confirmado PASA en la corrida original -- revalidar
+    con atención si se toca este código de nuevo.
+
+- id: SC-CW-05
+  status: >
+    NO CONCLUYENTE 2026-09-17 (continuación 7, device .63, login activo)
+    -- no se pudo confirmar ni refutar la hipótesis específica del caso
+    (¿se guarda la posición rebobinada o la más avanzada?) porque en la
+    práctica NINGUNA de las dos sobrevivió: el mismo bug de sincronización
+    de posición ya documentado (familia PR-174, ver CW-02/CW-03) se
+    interpuso primero. Contenido usado: "Lotería del Crimen | Temporada 1
+    | El Brujo: Capítulo 1" (video_id 68ccea1cc4d2a00e7defa1ac, duración
+    44:40), entrado desde su propia ShowPage (VER AHORA), NO desde Buscar
+    -- para evitar mezclar con el bug ya conocido de SC-CW-03. Secuencia:
+    reproducido normal, avanzado con Fwd+Select hasta posición 1161s
+    (~19.4 min, la "más avanzada"), luego rebobinado con Rev+Select hasta
+    posición 832.5s (~13.9 min, la "rebobinada", confirmada MENOR a la
+    avanzada por `query/media-player`), Back inmediato tras confirmar el
+    rebobinado. Al reingresar al mismo episodio (tanto por VER AHORA desde
+    ShowPage como por la tarjeta de Continuar Viendo en Home tras
+    relanzamiento en frío) el log mostró `playVideo : Seek parameter = 0`
+    y la tarjeta de Continuar Viendo mostró badge "44 MINUTOS" (=
+    prácticamente la duración TOTAL, equivalente a 0% de avance guardado)
+    -- es decir, NI la posición avanzada (1161s) NI la rebobinada (832s)
+    se preservaron; el backend no guardó ninguna de las dos, reiniciando
+    desde 0 en ambos caminos de reentrada. Esto es consistente con el
+    mismo patrón ya documentado de "posición no reflejada correctamente"
+    (CW-02) -- no es una regresión nueva de este caso puntual, pero
+    tampoco permite validar la pregunta específica de SC-CW-05 (rebobinado
+    vs. avanzado) porque el bug de fondo enmascara cualquier diferencia
+    entre las dos posiciones -- ambas se pierden igual. Se recomienda
+    reintentar esto SOLO después de que el bug de sincronización de
+    posición (PR-174) esté resuelto, ya que hasta entonces cualquier
+    intento de este escenario puntual chocará con el mismo bloqueo de
+    fondo. Evidencia: reports/azteca/player/CORRIDA-device63-20260917/telnet.log
+    (líneas ~24980-25760 aprox.), capturas 155-156 (Home/Continuar viendo
+    tras el intento, badge "44 MINUTOS" sin reflejar ningún avance real).
+  title: "Reproducir, rebobinar a una posición anterior, Back, validar que se guarda la posición nueva y no la más avanzada"
+  area: [player, core-network]
+  severity: minor
+  screen: Player -> Home
+  steps:
+    - Reproducir un contenido de duración confirmada de varios minutos
+    - Dejarlo avanzar unos segundos/minutos, después rebobinar (Rewind) a una posición anterior a la alcanzada
+    - Presionar Back inmediatamente después de rebobinar
+  expected:
+    - La posición guardada refleja el punto de rebobinado (más bajo), no la posición más avanzada que se había alcanzado antes de rebobinar
+  logs_watch:
+    - Confirmar en el log la posición antes del rebobinado y la posición final guardada tras el Back (ej. `from_position` / `position`)
+  visual_check: null

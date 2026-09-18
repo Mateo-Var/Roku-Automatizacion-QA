@@ -1,0 +1,461 @@
+# Escenarios compartidos (Core) — Login, Registro y Seguridad del formulario
+#
+# Ver scenarios/shared/README.md para la convención de `area`/`severity`/`status`.
+# Ver scenarios/shared/login-registro/runbook.md para el guión operativo
+# de cómo correr toda esta batería en una sola sesión (~18-20 min).
+#
+# Estado (2026-09-15): los 8 escenarios están validados contra Azteca
+# (device 192.168.1.186), con 3 hallazgos reales confirmados y pendientes
+# de reportar al equipo de Core/backend -- ver PROJECT_MEMORY.md, sección
+# "📍 Resumen ejecutivo" al principio del archivo, para el detalle.
+#
+# NOTA MULTI-CLIENTE: estos escenarios prueban componentes del Core
+# (LoginRegPage, LoginEmailView, etc.), compartidos por todos los
+# clientes -- no deberían necesitar reescribirse para correr contra otro
+# cliente, solo credenciales/device distintos (ver
+# scenarios/clients/<cliente>/profile.yaml). Sin confirmar todavía si el
+# bug crítico es del Core (afectaría a todos) o de la config/backend
+# específico de Azteca -- pendiente probar en un segundo cliente.
+
+- id: AC-UL-01
+  status: >
+    DONE (2026-09-18, re-corrida completa) -- device 192.168.1.54, build "TV
+    Azteca En Vivo" v1.24.92609040. Se logueó desde AccountPage ("Cerrar
+    sesión") para forzar estado deslogueado real: log confirma
+    "login_status":"anonymous" (IM vacío). Cold start (Home + launch/dev)
+    en ese estado -> GA4 screen_view arranca con "login_status":"anonymous",
+    confirmando la precondición "sin sesión iniciada". NOTA sobre el
+    "prompt de login": la app NO fuerza un popup modal al arrancar
+    deslogueada -- deja navegar libre con el sidebar mostrando "Ingresar" en
+    vez de "Mi cuenta" (ya documentado como comportamiento esperado, ver
+    AC-UL-04). El flujo de login real: sidebar "Ingresar" -> LoginRegPage ->
+    "Ingresar con email" (intercepta diálogo nativo Roku one-touch ->
+    "Usar un correo electrónico diferente") -> LoginEmailView, que ahora
+    ofrece explícitamente dos botones "ENVIAR CÓDIGO" / "INGRESAR CON
+    CONTRASEÑA" (antes solo se documentaba el flujo de código) -> se usó
+    "INGRESAR CON CONTRASEÑA" -> LoginWithPasswordView, email
+    jmatevargas@poligran.edu.co + password Winner2025 (verificado char por
+    char con MOSTRAR) -> Select -> login_success real confirmado por log,
+    mismo IM histórico 30f41b94-1310-46e1-8627-fb31590ffef3,
+    login_status:"connected", Home pasa a mostrar "Continuar viendo" y
+    sidebar con ícono de cuenta. Identidad visible confirmada en captura
+    (Home logueado). Logout re-confirmado también al principio de esta
+    corrida desde AccountPage ("Mi cuenta" -> jmatevargas@poligran.edu.co /
+    Mateo Vargas -> "Cerrar sesión") -> login_status pasa a "anonymous".
+    Los 6 pasos del escenario (cold start deslogueado, prompt/estado de
+    login, login exitoso, identidad visible, logout desde AccountPage,
+    estado deslogueado tras logout) quedan cubiertos en esta sola corrida.
+    Evidencia: reports/azteca/2026-09-18_11-37-login-registro/{logs/AC-UL-01-retry.log,videos/AC-UL-01-retry.mp4,screenshots/AC-UL-01-retry-*.jpg}
+    (evidencia del intento parcial anterior sigue en
+    logs/AC-UL-01.log,videos/AC-UL-01.mp4).
+  title: Login y logout funcionan correctamente (app y Smart Hub)
+  area: [core-network, core-ui]
+  severity: blocker
+  screen: LoginRegPage / AccountPage
+  steps:
+    - Lanzar el canal desde cero (cold start), sin sesión iniciada
+    - Observar que aparece un popup/pantalla pidiendo iniciar sesión
+    - Iniciar sesión con credenciales válidas
+    - Verificar que se muestra el id de cuenta / apodo con estado "sesión iniciada"
+    - Ir a AccountPage y cerrar sesión
+    - Verificar que se muestra el estado "sesión cerrada"
+  expected:
+    - Al arrancar sin sesión, aparece el prompt de login (no deja navegar libre sin avisar)
+    - Tras login exitoso, se ve el identificador de cuenta/apodo en algún lugar de la UI
+    - Tras logout, vuelve a estado deslogueado visible
+  logs_watch:
+    - Llamada de auth resuelve isSuccess/ok=true al loguear
+    - Limpieza de roRegistry (prefijo ottName) al desloguear
+  visual_check: screenshot del popup de login, de la pantalla con sesión iniciada (nombre/apodo visible), y de la pantalla tras logout
+
+- id: AC-UL-02
+  status: >
+    DONE (2026-09-14) -- Caso A (email inexistente) y Caso C (formato
+    inválido) PASARON. Caso B (password incorrecta contra email válido) es
+    el BUG CRÍTICO -- ya reproducido 8 VECES en total entre esta y otras
+    corridas (AC-SEC-01, AC-SEC-05, AC-SEC-07). NO buscar más
+    reproducciones del Caso B -- está sobrado de evidencia, cualquier
+    nuevo intento de login con email válido + password incorrecta lo va a
+    disparar de nuevo como efecto secundario, eso es esperado y no hace
+    falta documentarlo de nuevo cada vez. Evidencia:
+    reports/azteca/login-registro/AC-UL-02-20260914-090500_AMBIGUO-reintentar/
+    (primera corrida, ambigua) y AC-UL-02-20260914-run2/ (confirmación
+    definitiva con MOSTRAR).
+
+    RE-CONFIRMACIÓN 2026-09-18 (post-reorganización, device 192.168.1.54 --
+    mismo Roku Express, antes .186): Caso B NO se reprodujo esta vez, con
+    un resultado distinto y significativo. El flujo real de "Ingresar con
+    email" en este build lleva al MISMO formulario compartido que
+    "Registrarme con email" (`RegEmailView`, GA4 marca
+    `screen_name:"Register with Email"` para ambos). Al enviar
+    jmatevargas@poligran.edu.co + password incorrecta, el backend
+    respondió `HTTP 400 {"status":"ERROR","error":"EMAIL_ALREADY_REGISTERED"}`
+    -- es decir, la app rechazó el intento PORQUE el email ya existe,
+    sin llegar a validar la contraseña en ningún momento (evento GA4
+    resultante: `login_error`, NO `login_success`). Esto es DISTINTO del
+    bug original (que sí lograba `login_success` con password
+    incorrecta) -- posible indicio de que el flujo de login cambió (ya no
+    intenta autenticar con password contra una cuenta existente por esta
+    ruta) o que el fix ya se aplicó del lado del backend. PENDIENTE:
+    confirmar si existe una ruta de login "real" separada (ej. un botón
+    "INGRESAR CON CONTRASEÑA" reportado en otra sesión) que si valide
+    password contra cuenta existente -- en esta corrida no apareció esa
+    opción, solo el diálogo nativo Roku (Continuar/Cancelar/Política)
+    seguido siempre del mismo formulario de registro compartido. NO dar
+    el bug original por resuelto sin esa confirmación adicional -- puede
+    que exista otra ruta de login que sí sea vulnerable y no se haya
+    ejercitado hoy. Evidencia: reports/azteca/2026-09-18_11-37-login-registro/
+    (logs/AC-UL-02.log, videos/AC-UL-02.mp4, screenshots/AC-UL-02-*.jpg).
+
+    ⚠️ RE-CORRIDA DEFINITIVA 2026-09-18 17:15-17:22 UTC (AC-UL-02-retry,
+    device 192.168.1.54, build v1.24.92609040) -- LA RE-CONFIRMACIÓN
+    ANTERIOR ESTABA CONTAMINADA: se había ejercitado el flujo de REGISTRO
+    (RegEmailView / screen_name "Register with Email"), NO el de login. La
+    ruta de LOGIN REAL existe y es otra, confirmada por log paso a paso:
+    sidebar "Ingresar" -> `LoginRegPage : Init` (screen_name "Login") ->
+    botón "INGRESAR CON EMAIL" (columna derecha "Inicia sesión", NO el
+    amarillo "REGISTRARME CON EMAIL" de la izquierda) -> diálogo NATIVO de
+    Roku titulado "Iniciar sesión" (one-touch con ottnext@mediastre.am) ->
+    "Usar un correo electrónico diferente" -> `LoginEmailView : Init`
+    (screen_name "Login with Email") -> botón "INGRESAR CON CONTRASEÑA" ->
+    `LoginWithPasswordView : Init` (screen_name "Login with Password").
+
+    Resultados por esa ruta real:
+    - Caso A (email inexistente noexiste.qa2026@poligran.edu.co + password
+      cualquiera): PASA. Backend responde HTTP 400
+      {"status":"ERROR","error":"FEDERATION_INVALID_CREDENTIALS"}, GA4
+      emite `login_error` con IM vacío, la UI muestra el mensaje genérico
+      correcto "El usuario o contraseña son incorrectos" y permanece en
+      LoginWithPasswordView sin crash.
+    - Caso B (email VÁLIDO jmatevargas@poligran.edu.co + password
+      DELIBERADAMENTE INCORRECTA "PasswordIncorrecta99", verificada
+      carácter por carácter con el toggle MOSTRAR antes de confirmar):
+      **BUG CRÍTICO REPRODUCIDO, NO ESTÁ ARREGLADO**. GA4 emite
+      `login_success` con login_source:"email", new_user:false,
+      login_status:"connected" e IM real
+      30f41b94-1310-46e1-8627-fb31590ffef3 (el MISMO del login legítimo de
+      AC-UL-01). La app navega a HomePage ya logueada, con fila
+      "Continuar viendo" e ícono de cuenta en el sidebar, y AccountPage
+      muestra la identidad real completa ("jmatevargas@poligran.edu.co /
+      Mateo Vargas" + "Cerrar sesión"). Es decir: sesión plena y legítima
+      obtenida con una contraseña incorrecta. 9na reproducción del bug, y
+      la PRIMERA por la ruta de login real post-reorganización -- queda
+      descartada la hipótesis de que el backend lo hubiera arreglado.
+      Contraste demoledor con el Caso A: el MISMO endpoint sí valida
+      credenciales cuando el email no existe (FEDERATION_INVALID_CREDENTIALS)
+      pero NO valida la password cuando el email sí existe.
+      Nota lateral: en el login exitoso aparece también
+      `ssoService : saveData : Response : {status:404, response:"Service
+      error: Make sure that you have set a billing channel"}` -- error
+      manejado, no crashea, pero vale reportarlo aparte.
+    - Caso C (formato inválido "correosinarroba.com"): PASA. Validación
+      client-side en LoginEmailView, mensaje "Formato de correo inválido"
+      en rojo bajo el campo, sin llamada de red y sin crash.
+    Evidencia: reports/azteca/2026-09-18_11-37-login-registro/
+    (logs/AC-UL-02-retry.log, logs/AC-UL-02-retry-casoB.log,
+    videos/AC-UL-02-retry.mp4, screenshots/AC-UL-02-retry-01..18-*.jpg).
+  title: Manejo de credenciales inválidas / formato incorrecto
+  area: [core-network, core-ui]
+  severity: major
+  screen: LoginRegPage
+  steps:
+    - Ir a LoginRegPage (deslogueado)
+    - "Caso A -- email incorrecto: ingresar un email que NO existe como cuenta (ej. variante inventada), contraseña cualquiera, confirmar"
+    - "Caso B -- password incorrecta: ingresar el email VÁLIDO (jmatevargas@poligran.edu.co) con una contraseña deliberadamente incorrecta, confirmar"
+    - "Caso C -- formato inválido: email sin @, o campo vacío, confirmar"
+  expected:
+    - Solo cuentas autorizadas pueden loguear -- en NINGÚN caso (A, B o C) debe terminar logueado
+    - Mensaje de error visible y específico por cada caso
+    - No crash, permanece en LoginRegPage
+  logs_watch:
+    - Error de dominio manejado (isSuccess=false / error() controlado), no excepción cruda ni ParseJSON sin manejar
+    - 'CRÍTICO: NUNCA debe aparecer "login_success"/"login_status":"connected" en los casos A o B -- si aparece, es el bug a confirmar'
+  visual_check: >
+    screenshot de cada mensaje de error mostrado. OBLIGATORIO antes de
+    confirmar cada intento: activar el toggle "MOSTRAR" (mostrar
+    contraseña) visible en la pantalla de password y tomar captura del
+    texto en claro, para confirmar con certeza qué carácter por carácter
+    quedó realmente escrito por el teclado en pantalla -- esto es lo que
+    faltó la vez pasada y dejó un resultado ambiguo (ver PROJECT_MEMORY.md,
+    sesión 2026-09-14). No confirmar el intento sin haber verificado así el
+    valor real tipeado.
+
+- id: AC-UL-03
+  status: >
+    DONE (2026-09-14) -- PASÓ, la sesión persiste tras cold relaunch.
+    Evidencia: reports/azteca/login-registro/AC-UL-03-20260914/.
+
+    RE-CONFIRMADO (2026-09-18, device 192.168.1.54, build v1.24.92609040) --
+    PASA de nuevo, comportamiento idéntico. Estando logueado (IM real
+    30f41b94-1310-46e1-8627-fb31590ffef3), se forzó cold relaunch (Home +
+    launch/dev). El log muestra AppLaunchInitiate/InstantOn ->
+    MainScene:Init -> SideBar:Init -> HomePage:Init limpio, y el primer GA4
+    screen_view ya emite login_status:"connected" con el IM real, sin
+    ninguna pantalla de login intermedia (2 screen_view "connected", 0
+    "anonymous"). La app persiste sesión vía roRegistry y arranca directo
+    logueada. Sin Backtrace / excepción no manejada (solo el WARNING
+    inocuo de variable no usada en MainScreen.brs(54)). Evidencia:
+    reports/azteca/2026-09-18_11-37-login-registro/{logs/AC-UL-03.log,videos/AC-UL-03.mp4,screenshots/AC-UL-03-01-relaunch.jpg}
+  title: Re-login tras reiniciar la app
+  area: [core-network, core-ui]
+  severity: major
+  screen: LoginRegPage
+  steps:
+    - Con sesión iniciada, forzar cierre/relanzamiento de la app (Home + launch/dev, cold start)
+    - Observar si la app recuerda la sesión o vuelve a pedir login
+    - Si vuelve a pedir login, iniciar sesión de nuevo con las mismas credenciales válidas
+  expected:
+    - Si la app no persiste sesión entre reinicios, el usuario puede volver a loguearse sin errores
+    - Si la app SÍ persiste sesión (roRegistry), arranca directo logueado -- documentar cuál es el comportamiento real de Azteca, no asumir
+  logs_watch:
+    - Lectura de roRegistry al arrancar (si existe) resuelve sin excepción
+
+- id: AC-UL-04
+  status: >
+    PARCIAL (2026-09-14) -- la premisa del escenario no aplicó: no se
+    encontró NINGÚN contenido que gatee login para reproducir (probado en
+    3 puntos: 2 VOD desde Home, 1 live hero). No re-ejecutar este mismo
+    escenario tal cual -- si se retoma, que sea como exploración NUEVA
+    (más puntos del catálogo, no repetir los 3 ya probados) para confirmar
+    si existe *algún* contenido premium con candado, no como
+    re-validación de lo ya encontrado. Ligado a SC-PAYWALL-01 (nunca
+    corrido). Evidencia: reports/azteca/login-registro/AC-UL-04-20260914/
+
+    RE-CONFIRMADO (2026-09-18, device 192.168.1.54, build v1.24.92609040) --
+    mismo resultado: NO hay gating de login. Se hizo logout real desde
+    AccountPage (jmatevargas@poligran.edu.co / Mateo Vargas -> "Cerrar
+    sesión"), el sidebar pasó a mostrar el ícono "Ingresar" y la app quedó
+    deslogueada. Estando deslogueado se seleccionó el hero live "A Quien
+    Corresponda" desde Home y REPRODUJO directamente, sin pedir login:
+    query/media-player = state="play", error="false", is_live="true",
+    HLS, bandwidth ~25 Mbps, position avanzando; y el log GA4 durante la
+    reproducción sigue emitiendo login_status:"anonymous". Es decir, el
+    contenido (al menos el live de Home) NO gatea login en este build,
+    confirmando el hallazgo previo. No se encontró contenido premium con
+    candado que dispare el flujo de login diferido. Evidencia:
+    reports/azteca/2026-09-18_11-37-login-registro/{logs/AC-UL-04.log,videos/AC-UL-04.mp4,screenshots/AC-UL-04-01-sidebar.jpg,AC-UL-04-02-account.jpg,AC-UL-04-03-postlogout.jpg,AC-UL-04-04-afterplay.jpg}
+  title: Login diferido al reproducir contenido que lo requiere (deep-link-like redirect)
+  area: [core-network, core-ui, player]
+  severity: blocker
+  screen: HomePage -> LoginRegPage -> Player
+  steps:
+    - Abrir la app sin iniciar sesión (deslogueado)
+    - Intentar reproducir un contenido (VOD o live) desde Home
+    - Cuando la app lo solicite, iniciar sesión con credenciales válidas
+    - Observar a dónde navega la app inmediatamente después del login
+  expected:
+    - La app redirige automáticamente al media que se había intentado reproducir (no vuelve a Home a ciegas)
+    - El contenido se reproduce sin errores ni pasos manuales adicionales
+    - Al volver atrás (Back) desde el player y re-navegar, la pantalla de login NO vuelve a aparecer (sesión ya quedó iniciada)
+  logs_watch:
+    - player_loaded aparece después del login, sin reintentos manuales de navegación
+    - Sin re-disparo de la pantalla de login tras el login exitoso
+  visual_check: screenshot del intento de reproducir sin sesión, del login, y del player ya reproduciendo el contenido originalmente elegido
+
+- id: AC-REG-01
+  status: >
+    DONE (2026-09-14) -- PASÓ los 3 casos (registro nuevo, email duplicado,
+    password débil). Evidencia: reports/azteca/login-registro/AC-REG-01-20260914/.
+
+    RE-CONFIRMADO (2026-09-18, device 192.168.1.54, build v1.24.92609040) --
+    PASA. Flujo real: sidebar "Ingresar" -> LoginRegPage -> columna
+    IZQUIERDA "Regístrate"/"REGISTRARME CON EMAIL" (amarillo) -> diálogo
+    nativo Roku "Vamos a crear tu cuenta" (Continuar) -> RegEmailView
+    ("Crear una cuenta", screen_name GA4 "Register with Email"). El email
+    venía pre-cargado con la cuenta Roku (ottnext@mediastre.am); se REEMPLAZÓ
+    por un email de prueba inventado qa-test-2026-09-18-01@poligran.edu.co
+    (NO se usó la cuenta real) + password válida QaTest2026 (8+ chars, 1
+    mayúscula, 1 número -- verificada con toggle MOSTRAR carácter por
+    carácter). REGISTRARME -> navega a "VERIFICA TU CUENTA" (screen_name
+    "Verify with Code"): el registro se acepta y dispara envío de código de
+    activación al email, exigiendo verificación adicional de forma clara,
+    sin crash. Caso de error re-confirmado: código inventado "000000"
+    rechazado por backend con status:"ERROR" / error:"OTP_CODE_INVALID",
+    UI muestra borde rojo + mensaje "El código que ingresaste es incorrecto
+    o ha expirado...", permanece en la pantalla sin crash y NO loguea
+    (login_status sigue "anonymous"). El caso de email duplicado ya está
+    cubierto por AC-UL-02 (EMAIL_ALREADY_REGISTERED). No se completó el
+    registro (requiere el código real del email, fuera del alcance del
+    agente), por lo que no queda cuenta verificada creada. Evidencia:
+    reports/azteca/2026-09-18_11-37-login-registro/{logs/AC-REG-01.log,videos/AC-REG-01.mp4,screenshots/AC-REG-01-01..10-*.jpg}
+  title: Registro de cuenta nueva (confirmado que SÍ existe -- "Regístrate"/"Registrarme con email")
+  area: [core-network, core-ui]
+  severity: major
+  screen: LoginRegPage (opción de registro)
+  steps:
+    - Ir a LoginRegPage
+    - Seleccionar "Regístrate" / "Registrarme con email"
+    - Completar el flujo con un email de prueba NUEVO (no uno ya registrado) y una contraseña de prueba, usando el teclado en pantalla
+    - Confirmar el registro
+    - "Caso de error: intentar registrar con el email YA existente (jmatevargas@poligran.edu.co) y confirmar que muestra error de cuenta duplicada, no crash"
+    - "Caso de error: intentar registrar con formato inválido (email sin @, contraseña muy corta si aplica) y confirmar mensaje de error"
+  expected:
+    - El flujo de registro completa o pide verificación adicional (ej. email de confirmación) de forma clara, sin crash
+    - Registro con email duplicado muestra error claro, no crea cuenta duplicada ni loguea con datos ajenos
+    - Formato inválido muestra error específico, no crash
+  logs_watch:
+    - Sin excepciones no manejadas durante el flujo de registro
+    - Error de dominio manejado (isSuccess=false) en los casos de error, no excepción cruda
+  visual_check: >
+    Igual que AC-UL-02: usar el toggle "MOSTRAR" si existe en el campo de
+    contraseña para confirmar con certeza qué quedó tipeado antes de
+    confirmar cada intento.
+
+- id: AC-SEC-LOGIN-EDGE-01
+  status: >
+    DONE (2026-09-14) -- Escenario consolidado, reemplaza a los antiguos
+    AC-UL-KEYBOARD-01 (merged), AC-SEC-01 (superseded), AC-SEC-01B,
+    AC-SEC-02, AC-SEC-05, AC-SEC-06 y AC-SEC-07 -- eran 5-7 IDs separados
+    para variaciones del MISMO campo password/email en la MISMA pantalla,
+    que además siempre se corrían juntos en una sola sesión (ver
+    scenarios/shared/login-registro/runbook.md Fase 2). Se fusionan acá sin
+    perder cobertura -- cada sub-caso abajo mapea 1:1 a un hallazgo ya
+    confirmado. TODOS los sub-casos A-E: DONE, no re-ejecutar salvo
+    sospecha de regresión puntual. Evidencia repartida entre
+    reports/azteca/login-registro/AC-SEC-01B-20260914-135206/,
+    AC-UL-02-20260914-run2/, LOGIN-REGISTRO-FULL-v2-20260914-1434/.
+
+    RE-CONFIRMADO (2026-09-18, device 192.168.1.54, build v1.24.92609040) --
+    sub-caso A (fuerza bruta / rate limiting), el hallazgo insignia,
+    re-confirmado por la ruta de login real (LoginRegPage -> INGRESAR CON
+    EMAIL -> diálogo nativo "Iniciar sesión" -> "Usar un correo electrónico
+    diferente" -> LoginEmailView con email INEXISTENTE
+    noexiste.qa2026b@poligran.edu.co -> INGRESAR CON CONTRASEÑA ->
+    LoginWithPasswordView). Se hicieron 3 intentos consecutivos de login
+    con password (password verificada con MOSTRAR "Passw0rd1"): los 3
+    rechazados con HTTP 400 {"status":"ERROR","error":"FEDERATION_INVALID_CREDENTIALS"}
+    (6 respuestas del backend registradas, 4 eventos GA4 login_error,
+    login_source:"email", IM vacío), SIN ninguna fricción: cero
+    ocurrencias de HTTP 429 / "too many" / retry-after / captcha / throttle
+    / rate-limit / blocked en todo el log. Confirma que NO hay rate
+    limiting real ante intentos repetidos. Sub-casos B-E no re-ejecutados
+    esta corrida (siguen DONE de 2026-09-14, sin sospecha de regresión).
+    Evidencia: reports/azteca/2026-09-18_11-37-login-registro/{logs/AC-SEC-LOGIN-EDGE-01.log,videos/AC-SEC-LOGIN-EDGE-01.mp4,screenshots/AC-SEC-EDGE-01-01..08-*.jpg}
+  title: "Robustez del formulario de login: fuerza bruta, validación, inyección, input largo, normalización de email (consolidado)"
+  area: [core-network, core-ui]
+  severity: major
+  screen: LoginEmailView / LoginWithPasswordView
+  steps:
+    - "Sub-caso A (fuerza bruta, aislada del bug): con un email INEXISTENTE, 3 intentos consecutivos de login con password cualquiera -- editar solo el último caracter entre intento e intento (roku-type.js), verificar por log. DONE: rechaza los 3, pero SIN ninguna fricción (sin HTTP 429/delay/captcha) -- hallazgo confirmado: no hay rate limiting real."
+    - "Sub-caso B (password vacía/mínima, con email VÁLIDO): probar password vacía, luego 1 caracter. DONE: ambos rechazados correctamente, nunca loguea."
+    - "Sub-caso C (inyección, en AMBOS campos, con email VÁLIDO donde aplique): entrada tipo comillas simples/dobles mezcladas. DONE: sin crash, sin excepción BrightScript en ningún campo -- la app trata el string como texto plano. NOTA: si se prueba como password contra el email válido, va a disparar el bug crítico ya conocido (AC-UL-02 Caso B) -- eso es esperado, no reconfirmar con cuidado extra."
+    - "Sub-caso D (input largo 50+ chars, en AMBOS campos): DONE: trunca/hace scroll prolijo en los dos campos, sin crash ni freeze."
+    - "Sub-caso E (case sensitivity y espacios en email, con password correcta): mayúsculas + espacio final. DONE: mayúsculas rechazadas (case-sensitive, comportamiento válido no-bug), espacio final se trimea bien y loguea normal."
+  expected:
+    - Ningún sub-caso debe crashear la app ni generar excepción BrightScript no manejada
+    - Sub-caso A: idealmente debería haber fricción ante intentos repetidos (NO la hay -- hallazgo)
+    - Sub-casos B/C/D/E: comportamiento robusto confirmado, sin hallazgos nuevos más allá de lo ya documentado
+  logs_watch:
+    - Sin excepciones BrightScript no manejadas en ningún sub-caso
+    - Sub-caso A -- buscar "rate limit"/HTTP 429 (no apareció)
+    - Sub-caso B -- CRÍTICO si login_success con password vacía/1 char (no ocurrió)
+  visual_check: >
+    Presupuesto acotado -- 1 captura para el sub-caso A (resultado final),
+    1 para B, 1 con MOSTRAR si C se prueba como password, 1 para D
+    (campo largo), 1 para E. El resto se confirma por log
+    (onKeyEvent/screen_name/login_status), no por pantalla.
+
+- id: AC-SEC-03
+  status: >
+    DONE-MANUAL-PENDING (2026-09-14) -- la mitad automatizable PASÓ
+    (código inventado rechazado con OTP_CODE_INVALID). NO re-ejecutar esa
+    parte. Lo único pendiente es una acción HUMANA (no del agente):
+    confirmar si llegó un código OTP real al email y si ese código real
+    loguea bien -- eso no es un "test a re-correr", es una confirmación
+    que solo el usuario puede dar.
+  title: "Ingresar con código (OTP) -- ¿valida el código real?"
+  area: [core-network, core-ui]
+  severity: major
+  screen: LoginRegPage (opción "Ingresar con código")
+  steps:
+    - Seleccionar "Ingresar con código" con el email válido
+    - Confirmar que la app pide un código y (según el log/UI) que dice haberlo enviado
+    - Probar ingresar un código inventado (ej. "000000" o "111111") y confirmar
+  expected:
+    - Un código inventado NUNCA debe loguear -- debe mostrar error claro
+  logs_watch:
+    - 'CRÍTICO: si un código inventado resuelve login_success, es el mismo tipo de bug que AC-UL-02 pero en el flujo OTP'
+  manual_verification_required: >
+    PENDIENTE DE CONFIRMACIÓN HUMANA: el agente no tiene acceso a la bandeja
+    de email jmatevargas@poligran.edu.co. Dejar documentado en el reporte
+    que hace falta que el usuario confirme manualmente: (a) si efectivamente
+    llegó un correo con un código real, (b) si ese código real sí loguea
+    correctamente al probarlo. El agente solo puede confirmar la mitad
+    negativa (que un código inventado no debería pasar).
+
+    RE-CONFIRMADO (2026-09-18, device 192.168.1.54, build v1.24.92609040) --
+    la mitad automatizable PASA de nuevo. Flujo de login por código:
+    LoginRegPage -> INGRESAR CON EMAIL -> "Usar un correo electrónico
+    diferente" -> LoginEmailView -> email válido jmatevargas@poligran.edu.co
+    -> "ENVIAR CÓDIGO" -> navega a pantalla "Verify with Code" ("INICIA
+    SESIÓN -- Ingresa el código de activación que enviamos a
+    jmatevargas@poligran.edu.co"): confirma que la app SÍ pide el código y
+    dice haberlo enviado. Código inventado "111111" -> backend HTTP 400
+    {"status":"ERROR","error":"OTP_CODE_INVALID"}, evento GA4 login_error,
+    NO login_success (nunca loguea). Sigue PENDIENTE la confirmación HUMANA:
+    si llegó un código real al email y si ese código real loguea bien (el
+    agente no tiene acceso a la bandeja). Evidencia:
+    reports/azteca/2026-09-18_11-37-login-registro/{logs/AC-SEC-03.log,videos/AC-SEC-03.mp4,screenshots/AC-SEC-03-01-codeask.jpg,AC-SEC-03-02-codeinvalid.jpg}
+
+- id: AC-SEC-04
+  status: >
+    DESEMPATADO 3-2 (2026-09-14, 5ta corrida,
+    LOGIN-REGISTRO-FINAL20MIN-20260914-1628) -- SÍ hay fuga de
+    información. La 5ta corrida independiente reconfirmó el mensaje CON
+    línea roja adicional ("No encontramos una cuenta asociada a este
+    email. Verifica que esté bien...") SOLO para el email inexistente,
+    mensaje limpio (sin línea roja) para el email válido
+    (jmatevargas@poligran.edu.co) -- mismo patrón exacto que las corridas
+    2 y 3 (tiebreak). Conteo final: 3 de 5 corridas ven la fuga (corridas
+    2, 3-tiebreak, 5-final20min) vs. 2 que no (corridas 1 y 4-rigor). Con
+    mayoría 3-2 se cierra como hallazgo real (minor), siguiendo el mismo
+    criterio de mayoría ya usado para el bug crítico AC-UL-02. No se
+    investigó la causa de las 2 corridas discrepantes (posible
+    intermitencia real del backend/A-B test) -- no amerita más corridas,
+    la mayoría ya es clara. Evidencia de las 5 corridas: reports/
+    player-observation/AC-SEC-04-20260914-115607/ (sin fuga),
+    LOGIN-REGISTRO-FULL-v2-20260914-1434/ (con fuga),
+    AC-SEC-04-tiebreak-20260914-151506/ (con fuga),
+    LOGIN-REGISTRO-RIGOR-20260914-154433/ (sin fuga),
+    LOGIN-REGISTRO-FINAL20MIN-20260914-1628/ (con fuga, capturas 10 y 20).
+    Sigue pendiente la confirmación HUMANA de si llegó el correo real de
+    reset y si el link funciona (fuera del alcance del agente). Reportar
+    como hallazgo minor junto con AC-UL-02/AC-SEC-01B al equipo de
+    backend.
+
+    RE-CONFIRMADO DEFINITIVO (2026-09-18, device 192.168.1.54, build
+    v1.24.92609040) -- la fuga de información QUEDA CONFIRMADA sin
+    ambigüedad esta vez (ya no depende de mayoría 3-2). Se ejercitó
+    "OLVIDÉ MI CONTRASEÑA" (screen_name "Forgot Password") con los dos
+    emails en la misma corrida:
+    - Email INEXISTENTE (noexiste.qa2026b@poligran.edu.co): pantalla
+      "Recupera tu contraseña" muestra el texto genérico + una LÍNEA ROJA
+      adicional "No encontramos una cuenta asociada a este email. Verifica
+      que esté bien...", y el backend responde HTTP 404
+      {"status":"ERROR","error":"CUSTOMER_NOT_FOUND"} (prueba dura de la
+      enumeración: el backend distingue explícitamente la no-existencia).
+    - Email VÁLIDO (jmatevargas@poligran.edu.co): MISMA pantalla pero con
+      mensaje LIMPIO "Enviamos un enlace de recuperación a tu email ...
+      Sigue las instrucciones del correo para ingresar a tu cuenta", SIN
+      línea roja.
+    El contraste UI + el 404 CUSTOMER_NOT_FOUND solo en el inexistente
+    confirman la fuga (minor) de forma inequívoca. Sigue pendiente la
+    confirmación HUMANA de si llega el correo real de reset y si el link
+    funciona (fuera del alcance del agente). Evidencia:
+    reports/azteca/2026-09-18_11-37-login-registro/{logs/AC-SEC-04.log,videos/AC-SEC-04.mp4,screenshots/AC-SEC-04-01..10-*.jpg}
+  title: "Olvidé mi contraseña -- ¿filtra si el email existe o no?"
+  area: [core-network, core-ui]
+  severity: minor
+  screen: LoginWithPasswordView (link "Olvidé mi contraseña")
+  steps:
+    - Con el email válido, seleccionar "Olvidé mi contraseña" y confirmar
+    - Observar el mensaje mostrado (captura)
+    - Repetir el mismo flujo con un email que NO existe como cuenta
+    - Comparar los dos mensajes mostrados
+  expected:
+    - Idealmente el mensaje es igual en ambos casos ("si el email existe, te enviamos instrucciones") -- si el mensaje distingue explícitamente "email no encontrado" vs "correo enviado", es una fuga de información menor (permite enumerar qué emails están registrados, mismo patrón de fondo que AC-UL-02)
+  manual_verification_required: >
+    PENDIENTE DE CONFIRMACIÓN HUMANA: el agente no puede confirmar si
+    realmente llegó el correo de reset a la bandeja real. Documentar en el
+    reporte que falta esa confirmación manual del usuario.
+

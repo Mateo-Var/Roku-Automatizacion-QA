@@ -1,0 +1,22 @@
+{
+  "name": "roku-qa-automation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fase 1 - Device Runner: ejecuta escenarios de scenarios/*.yaml contra un Roku de QA real (ECP + telnet + screenshots), capturando logs y capturas por escenario.",
+  "type": "module",
+  "scripts": {
+    "run:azteca:login-registro": "node scripts/device-runner.js scenarios/clients/azteca/scenarios/login-registro/scenarios.yaml",
+    "run:azteca:navegacion:home": "node scripts/device-runner.js scenarios/clients/azteca/scenarios/navegacion/home/scenarios.yaml",
+    "run:azteca:navegacion:pantallas": "node scripts/device-runner.js scenarios/clients/azteca/scenarios/navegacion/pantallas/scenarios.yaml",
+    "run:azteca:navegacion:shows": "node scripts/device-runner.js scenarios/clients/azteca/scenarios/navegacion/shows/scenarios.yaml",
+    "run:azteca:navegacion:estres": "node scripts/device-runner.js scenarios/clients/azteca/scenarios/navegacion/estres/scenarios.yaml",
+    "run:azteca:player": "node scripts/device-runner.js scenarios/clients/azteca/scenarios/player/scenarios.yaml",
+    "run:azteca:boot": "node scripts/device-runner.js scenarios/clients/azteca/scenarios/boot-conectividad/scenarios.yaml",
+    "run:azteca:analytics": "node scripts/device-runner.js scenarios/clients/azteca/scenarios/analytics/scenarios.yaml",
+    "run:reference:player": "node scripts/device-runner.js scenarios/clients/_reference/scenarios/player/scenarios.yaml"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "js-yaml": "^4.1.0"
+  }
+}

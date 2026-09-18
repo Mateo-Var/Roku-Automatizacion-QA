@@ -1,0 +1,64 @@
+# Perfil del cliente Azteca -- SOLO metadata, NUNCA credenciales reales acá.
+#
+# Este archivo documenta qué es específico de este cliente para correr los
+# escenarios de scenarios/shared/. Las credenciales reales viven en el
+# .env local del usuario (nunca versionado) y se pasan directo al Agente
+# Player en cada corrida -- este archivo NO las sustituye ni las carga
+# automáticamente, es documentación para que cualquier persona/agente
+# sepa qué necesita pedir antes de arrancar.
+
+client_id: azteca
+repo_branch: client/azteca  # en ott-next-roku-tv-customer-apps
+
+device:
+  # La IP del Roku de QA cambia entre sesiones -- preguntar siempre al
+  # usuario cuál es la actual antes de conectar, no asumir la de acá.
+  last_known_ip: "192.168.1.186"
+  note: >
+    Roku Express, personal del usuario. Confirmado (2026-09-14) que NO es
+    el Roku compartido de firmado de CI/CD -- seguro para QA automatizado.
+
+credentials:
+  note: >
+    Ver .env local (ROKU_HOST, ROKU_DEV_PASSWORD) para acceso al device.
+    La cuenta de prueba de la app (email/password para login) se le pide
+    al usuario al arrancar cada sesión de login-registro -- no se guarda
+    en este repo en ningún archivo versionado.
+
+known_feature_flags:
+  # Confirmado corriendo escenarios reales contra el device -- no asumir
+  # para otro cliente, cada uno puede tener flags distintos.
+  registro_habilitado: true          # AC-REG-01, "Regístrate"/"Registrarme con email"
+  login_con_otp_habilitado: true     # AC-SEC-03, "Ingresar con código"
+  login_gatea_reproduccion: false    # AC-UL-04 -- ningún contenido probado exigió login
+  paywall_encontrado: null           # SC-PAYWALL-01 -- no corrido todavía, sin dato
+
+known_quirks:
+  # Cosas específicas de ESTE cliente/device que un Agente Player debería
+  # saber antes de arrancar, para no perder tiempo re-descubriéndolas.
+  - "El diálogo nativo de cuenta Roku (one-touch, ej. 'ottnext@mediastre.am')
+     puede interceptar el flujo de 'Ingresar con email' -- hay que navegar
+     a 'Usar un correo electrónico diferente' primero. Ver runbook de
+     login-registro para el detalle."
+  - "El nav bar lateral se despliega presionando Left desde las pantallas
+     principales."
+
+known_bugs_confirmed:
+  # Referencia rápida -- ver scenarios/shared/*/scenarios.yaml para el
+  # detalle completo de cada uno (campo `status`).
+  - id: AC-UL-02  # (dentro de AC-SEC-LOGIN-EDGE-01 ahora)
+    summary: "Bypass de contraseña -- email válido + password incorrecta de largo suficiente loguea igual. 11+ reproducciones."
+  - id: AC-SEC-LOGIN-EDGE-01-subcaso-A
+    summary: "Sin rate limiting en el login."
+  - id: AC-SEC-04
+    summary: "Fuga de info en 'Olvidé mi contraseña' (enumera cuentas existentes)."
+  - id: SC-PLAYER-BUG-01
+    summary: "ParseJSON crash al entrar al Player por selección manual de episodio (condición de carrera)."
+
+pendiente_de_confirmar_si_es_del_core_o_de_este_cliente: >
+  Ninguno de los bugs de arriba se probó todavía en un segundo cliente.
+  Como los componentes de login/registro son del Core (compartido), es
+  posible que afecten a TODOS los clientes -- pero también podrían
+  depender de la config/backend específico de Azteca (ottId/ottEnv en su
+  appConfig.json). No asumir, confirmar corriendo contra otro cliente
+  cuando se sume uno.

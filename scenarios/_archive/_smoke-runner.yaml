@@ -1,0 +1,11 @@
+- id: SC-SMOKE-01
+  title: Smoke test del runner (boot + home)
+  area: [player, client-config]
+  severity: blocker
+  screen: MainScreen (Azteca)
+  steps:
+    - Lanzar el canal desde cero (cold start)
+  expected:
+    - Llega a Home sin errores
+  logs_watch:
+    - "MainScreen : onLoadStatusChanged : loadStatus : ready"

@@ -1,0 +1,52 @@
+- id: SC-BOOT-01
+  title: Arranque de la app y carga del Core
+  area:
+    - player
+    - core-network
+    - client-config
+  severity: blocker
+  screen: MainScreen (Azteca)
+  steps:
+    - Lanzar el canal desde cero (cold start)
+    - >-
+      Observar el ComponentLibrary (rokuMSSdkComponentLib) cargar el .pkg
+      indicado en appConfig.pkgLibUrl
+    - Esperar loadStatus = "ready"
+  expected:
+    - MainLibScene se instancia y reemplaza el preloader sin quedar colgado
+    - No aparece el label de error ("App initilization failed...")
+  logs_watch:
+    - >-
+      la línea "MainScreen : onLoadStatusChanged : loadStatus : ready" debe
+      aparecer
+    - 'ninguna línea "loadStatus : failed"'
+    - Sin excepciones de compilación / Component Library
+  visual_check: >-
+    screenshot al terminar el preloader (comparar contra baseline "home o
+    login")
+- id: SC-SHOW-01
+  title: Detalle de show y reproducción
+  area:
+    - player
+    - core-network
+    - core-ui
+  severity: blocker
+  screen: ShowPage -> EpisodeDetailPage -> Player
+  steps:
+    - Lanzar el canal desde cero (cold start)
+    - Entrar al show enfocado en Home
+    - Bajar en la lista
+    - Bajar en la lista otra vez
+    - Moverse a la derecha
+    - Seleccionar episodio
+    - Pausar con Play
+    - Reanudar con Play
+  expected:
+    - Video arranca sin buffering excesivo
+    - Controles responden (play/pause/seek)
+  logs_watch:
+    - Sin errores del Player embebido (buffering infinito, DRM fail)
+    - roUrlTransfer del manifest/licencia resuelve OK
+  visual_check: >-
+    screenshot del player en reproducción (validar que no haya pantalla
+    negra/verde)

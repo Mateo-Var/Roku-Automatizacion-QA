@@ -1,0 +1,439 @@
+# Escenarios compartidos (Core) — Navegación: pantallas generales
+# (Discover/Secciones, EPG/En vivo, Search/Buscar, Favoritos, Radios)
+#
+# ===========================================================================
+# CORRIDA 2026-09-18 17:33-17:58 UTC — device 192.168.1.54, build
+# v1.24.92609040, sesión logueada. PRIMERA corrida post-reorganización.
+# Evidencia: reports/azteca/2026-09-18_17-25-navegacion/ (logs/, screenshots/,
+# videos/ con cámara real por caso). Resultados:
+#
+#   SC-DISCOVER-01                    PASA. `DiscoverPage : Init`,
+#     screen_name "Discovery". 9 categorías recorridas hasta el final
+#     ("Short Dramas"), sin timeouts ni errores.
+#   SC-DISCOVER-CONFIG-CROSSCHECK-01  PASA. Discover NO usa la lista de
+#     Home: en release.json es un único componente `ViewDiscoverSliders`.
+#     Set real observado: Recomendados para ti, MicroDramas, Programas,
+#     Realities y concursos, Regional News México, Podcast, Series, DocuFIA,
+#     Short Dramas. Difiere de Home: incluye "Short Dramas" (que Home no
+#     tiene) y NO incluye "Top 10" ni "Continuar viendo". Le faltan las
+#     mismas "Novelas" y "Cine Mexicano" que a Home (ver el hallazgo en
+#     navegacion/home/scenarios.yaml).
+#   SC-DISCOVER-VERMAS-01             PASA. Aplica igual que en Home, y
+#     Discover trunca ANTES: Regional News corta a 8 ítems + "Ver más",
+#     contra los 27 de Home.
+#   SC-DISCOVER-CATEGORYGRID-01       PASA. Scroll profundo hasta la última
+#     fila del grid (Yucatán/Zacatecas); foco y layout intactos, sin errores.
+#   SC-DISCOVER-IMAGES-01             PASA. Todas las miniaturas cargaron en
+#     todas las capturas; ningún placeholder ni fallback roto.
+#   SC-DISCOVER-BURST-01              PASA. 30 Down + 30 Up + 20 Right en
+#     ráfaga; layout y foco coherentes, sin errores en log.
+#   SC-EPG-01                         PASA. `EPGPage : Init`, screen_name
+#     "EPG"; franjas Hoy/Ahora/Próximamente con logos de canal correctos.
+#   SC-EPG-DETAIL-01                  PASA con 2 observaciones menores:
+#     (a) el horario se muestra SOLO en la celda con foco -- las demás
+#     muestran solo el título, así que no se puede escanear la grilla de
+#     horarios de un vistazo, que es justamente para lo que sirve un EPG;
+#     (b) títulos largos se cortan en seco contra el borde de la columna SIN
+#     elipsis ("...Vaitiare Mateos y Valentina Rod"), a diferencia del resto
+#     de la app que sí elide. Lo demás bien: horas correctas y consistentes
+#     con Home, logos bien renderizados, alineación pareja, el hero de fondo
+#     sigue al programa enfocado.
+#   SC-SEARCH-01                      PASA los 5 sub-casos. Vacío OK; con
+#     resultados ("exatlon" matchea "Exatlón" -> normaliza acentos bien);
+#     sin resultados -> "No se han encontrado resultados"; texto largo de 62
+#     chars sin crash (el campo trunca visualmente). NOTA: el teclado en
+#     pantalla de Search solo ofrece a-z + 0-9 + espacio/borrar -- no hay
+#     caracteres especiales, pero el campo SÍ los acepta por otras vías
+#     (ECP, y el teclado del celular vía el QR que ofrece la propia Roku).
+#   SC-FAV-01                         PASA funcional, CON BUG DE FONDO
+#     reconfirmado (5ª vez) y por primera vez con ubicación exacta:
+#     `BRIGHTSCRIPT: ERROR: roSGNode.AddReplace: "compnode": Type mismatch:
+#     ottnext_ms_sdk_componentlib:/components/pages/ShowPage/ShowPage.brs(1086)`
+#     Se dispara en CADA toggle (marcar y desmarcar), reproducible al 100%.
+#     Está en ottnext_ms_sdk_componentlib = código del CORE/SDK, NO
+#     específico de Azteca -> afectaría a todos los clientes. Reportarlo con
+#     archivo+línea al equipo de Core.
+#   SC-RADIOS-01                      CONFIRMADO. La ruta `Radios` existe en
+#     release.json pero el sidebar solo expone Inicio / Secciones / En vivo /
+#     Favoritos / Buscar / Mi cuenta. No alcanzable desde la UI.
+# ===========================================================================
+#
+# Ver scenarios/shared/README.md para la convención de `area`/`severity`/`status`.
+#
+# Origen: exploración dedicada 2026-09-15 (noche), log+captura primero,
+# escenarios escritos al final basados en lo observado. Reemplaza a
+# SC-DISCOVER-01, SC-EPG-01, SC-SEARCH-01, SC-FAV-01 de la corrida anterior
+# (scenarios/shared/navegacion/_previo-2026-09-15-ya-corrido.yaml) con
+# escenarios más específicos y con más sub-casos. Evidencia completa:
+# reports/azteca/navegacion/EXPLORACION-20260915-1900/.
+#
+# Mapeo de nav bar real -> screen_name confirmado por log (IMPORTANTE, no
+# coincide 1:1 con los nombres del release.json):
+#   Inicio      -> Home
+#   Secciones   -> Discovery (DiscoverPage / discoverPage)
+#   En vivo     -> EPG (EPGPage / epgPage)
+#   Favoritos   -> Favorite (FavoritePage / favoritePage)
+#   Buscar      -> Search (SearchPage / searchPage)
+#   Mi cuenta   -> (no explorado en esta sesión, ya cubierto por login-registro)
+# NO existe "Radios" en el nav bar visible -- ver SC-RADIOS-01 abajo.
+
+- id: SC-DISCOVER-01
+  status: >
+    CONFIRMADO -- corrida formal 2026-09-15 (CORRIDA-FORMAL-20260915-2200),
+    RECONFIRMADO. `DiscoverPage : Init`, `screen_name:"Discovery"`
+    confirmado por log. Captura 22-discover.jpg muestra categorías
+    cargadas ("Recomendados para ti", "MicroDramas", "Programas") sin
+    freeze ni vacíos.
+    ---
+    DONE (2026-09-15, exploración) -- PASÓ. "Secciones" en el nav lateral
+    = DiscoverPage (`screen_name:"Discovery"`, confirmado por log). Carga
+    con spinner ~2.5s antes de mostrar contenido (timing normal, no
+    freeze). Categorías vistas (Recomendados para ti, MicroDramas,
+    Programas...) coinciden con el release.json. Se navegó dentro y se
+    entró a un show desde acá sin problemas (ver shows/scenarios.yaml).
+  title: "Secciones (Discover) carga todas las categorías con timing aceptable"
+  area: [core-network, core-ui]
+  severity: minor
+  screen: DiscoverPage
+  steps:
+    - Desde el nav lateral (Left desde cualquier pantalla principal), seleccionar "Secciones"
+    - Esperar la carga (spinner) y confirmar contenido
+  expected:
+    - Carga en <5s, categorías visibles coinciden con config
+  logs_watch:
+    - 'DiscoverPage : Init, screen_name:"Discovery"'
+  visual_check: captura tras el spinner con categorías cargadas
+
+- id: SC-DISCOVER-CONFIG-CROSSCHECK-01
+  status: >
+    CONFIRMADO -- corrida CORRIDA-EXTENDIDA-device63-20260915 contra
+    192.168.1.63 (device distinto al habitual .186). release.json ACTUAL
+    traído por curl en esta sesión (no copia vieja):
+    `app.version:"1.0.86"` (idéntico al de la exploración anterior),
+    `hasAuth/hasSearch/hasDiscoverContent:true`, `hasPlayerLives/hasSports:false`.
+    HALLAZGO IMPORTANTE sobre la estructura real del config: el
+    release.json NO enumera las categorías de Discover de forma estática
+    en ningún campo (`collections` está vacío `{}`, `layouts.Default`
+    tiene solo `name`+`components` sin datos de categorías) -- las
+    categorías reales (Recomendados para ti, MicroDramas, Programas,
+    Realities y concursos, Regional News México, Podcast, Series, DocuFIA,
+    Short Dramas -- mismo set 1:1 que en la exploración anterior contra
+    .186) se resuelven en runtime vía API (`config.api`), no desde el
+    config estático. Esto significa que el "crosscheck" real posible es a
+    nivel de FLAGS (`hasDiscoverContent`, etc.) y de que la ruta `Discover`
+    esté declarada en `routes` (confirmado: `path:"/discover"`,
+    `requiresAuthentication:false`) -- no una comparación categoría-por-
+    categoría contra el JSON, porque el JSON no las contiene. Ninguna
+    categoría "fantasma" encontrada; "Short Dramas" confirmado como última
+    categoría real (scroll hasta el final, capturas 13-15).
+  title: Las categorías reales de Discover coinciden con el release.json vivo (puede diferir del set de Home)
+  area: [core-network, core-ui]
+  severity: major
+  screen: DiscoverPage
+  steps:
+    - Traer el `release.json` ACTUAL (no una copia vieja, se actualiza en cada publish) antes de esta corrida
+    - Entrar a Discover ("Secciones"), listar TODAS las categorías visibles bajando/scrolleando hasta el final
+    - Comparar 1:1 contra la sección de categorías del release.json -- ojo, Discover podría mostrar un set distinto al de los rieles de Home (Discover suele ser "todo el catálogo", Home suele ser curado) -- no asumir que son el mismo set, confirmarlo
+  expected:
+    - Cada categoría configurada en el release.json aparece en Discover (o documentar explícitamente cuál no aparece y por qué, ej. requiere auth y el usuario está deslogueado)
+    - Ninguna categoría "fantasma" en pantalla que no esté en la config
+  logs_watch: []
+  visual_check: capturas del scroll completo de Discover, de arriba a abajo
+
+- id: SC-DISCOVER-VERMAS-01
+  status: >
+    CONFIRMADO, HIPÓTESIS PREVIA REFUTADA -- corrida
+    CORRIDA-EXTENDIDA-device63-20260915 contra 192.168.1.63 (device
+    distinto al habitual .186). La sospecha original ("Discover ya es la
+    vista completa, no debería necesitar Ver más") NO se confirma: sí
+    existe "Ver más" dentro de categorías de Discover cuando el contenido
+    excede lo que entra en la fila -- confirmado en "Regional News México"
+    (misma categoría con Ver más ya documentada en Home, limit 27),
+    navegado hasta el final de la fila (captura 17, tile "Ver más"
+    claramente visible con flecha), seleccionado, lleva a
+    CategoryGridPage (`showScreencategoryGridPage`, `screen_name:"Category"`)
+    con el grid completo de esa categoría (25+ items, capturas 18-19). Es
+    decir: Discover usa el MISMO patrón de "Ver más" que Home (aparece
+    solo cuando hay más contenido real del que la fila muestra), no un
+    comportamiento distinto. Dato a favor de por qué no se vio en la
+    exploración anterior: la fila de "Regional News México" en la vista
+    inicial de Discover no mostraba el tile "Ver más" hasta hacer scroll
+    horizontal bien al final (27 items reales), fácil de no notar sin
+    scrollear a fondo.
+  title: "\"Ver más\" dentro de Discover -- confirmar si aplica igual que en Home o si Discover ya muestra todo por defecto"
+  area: [core-ui]
+  severity: minor
+  screen: DiscoverPage
+  steps:
+    - Para cada categoría de Discover con varios ítems en fila, moverse a la derecha hasta el final de esa fila
+    - Confirmar si aparece "Ver más" ahí (igual patrón que en Home -- solo cuando hay más contenido del que entra en la fila) o si Discover ya lista todo el contenido de esa categoría directamente sin necesitar "Ver más"
+    - Si aparece, seleccionarlo y confirmar que lleva a más contenido real de esa categoría
+  expected:
+    - Documentar el comportamiento real encontrado -- no asumir que tiene que comportarse igual que Home, Discover podría no necesitar "Ver más" si ya es "todo el catálogo" por diseño (la captura 22-discover.jpg de la corrida anterior sugiere el título "Todas las categorías" / "Descubre todo nuestro contenido", lo cual apunta a que Discover YA es la vista completa)
+  logs_watch: []
+  visual_check: captura del final de al menos 2 filas de categorías distintas en Discover
+
+- id: SC-DISCOVER-CATEGORYGRID-01
+  status: >
+    CONFIRMADO -- corrida CORRIDA-EXTENDIDA-device63-20260915 contra
+    192.168.1.63 (device distinto al habitual .186). Categoría "Regional
+    News México" (27 items) recorrida en scroll profundo (Down x6) hasta
+    el final real (fila "Yucatán"/"Zacatecas", capturas 18-19) -- foco
+    visible en todo momento, sin saltos raros, sin degradación de
+    responsividad, sin errores de carga en el log. Ítem "Zacatecas" (el
+    último real del grid, NO uno de los primeros) seleccionado y abrió
+    correctamente su ShowPage real (`program:"Zacatecas"`,
+    `screen_name:"Show"`, con datos reales -- "Hechos Meridiano", 257
+    videos) -- confirmado que no es una posición "fantasma" sin datos.
+  title: Scroll profundo dentro de una categoría grande de Discover no rompe foco ni layout
+  area: [core-ui]
+  severity: major
+  screen: DiscoverPage (categoría con muchos ítems, ej. "Programas")
+  steps:
+    - Elegir la categoría con más ítems visible en Discover (ej. "Programas" o "MicroDramas")
+    - Navegar hacia la derecha/abajo repetidas veces hasta llegar bien al final de esa categoría (scroll profundo, no solo unos pocos ítems)
+    - Confirmar que el foco se mantiene visible durante todo el recorrido, sin saltos raros ni desaparición
+    - Entrar a un ítem que esté bien al final del scroll (no uno de los primeros) y confirmar que abre el show correcto
+  expected:
+    - Sin freeze ni degradación de responsividad a medida que se navega más profundo
+    - El foco nunca desaparece
+    - Un ítem al final del scroll abre correctamente (no es una posición "fantasma" sin datos reales)
+  logs_watch:
+    - Sin timeouts ni errores de carga al pedir más ítems de la categoría (si el grid pagina/carga bajo demanda)
+  visual_check: captura a mitad de camino y al final del scroll profundo
+
+- id: SC-DISCOVER-IMAGES-01
+  status: >
+    CONFIRMADO -- corrida CORRIDA-EXTENDIDA-device63-20260915 contra
+    192.168.1.63 (device distinto al habitual .186). Recorridas 6+
+    categorías completas (Recomendados para ti, MicroDramas, Realities y
+    concursos, Regional News México, Podcast, Series, DocuFIA, Short
+    Dramas) incluyendo el grid completo de "Regional News México" (27
+    items, capturas 18-19) -- todas las miniaturas cargaron imagen real,
+    incluidos los ítems al final de categorías largas (más propensos a no
+    precargar), sin ningún placeholder gris permanente ni ícono roto. Sin
+    errores de carga de imagen en el log en ningún punto de la corrida.
+  title: Miniaturas de Discover cargan bien; fallback si falta imagen o no es compatible
+  area: [core-ui]
+  severity: minor
+  screen: DiscoverPage
+  steps:
+    - Recorrer varias categorías de Discover revisando que cada miniatura cargue una imagen real (no placeholder gris permanente)
+    - Si se encuentra algún ítem sin imagen de origen, confirmar que se muestra una imagen alternativa/fallback en vez de un hueco vacío o un ícono roto
+    - Prestar atención a ítems al final de categorías largas (más propensos a no haberse precargado)
+  expected:
+    - Todas las miniaturas terminan mostrando una imagen (real o fallback), ninguna queda permanentemente vacía/rota
+  logs_watch:
+    - Errores de carga de imagen en el log, si los hay (roUrlTransfer fallido sobre una URL de imagen)
+  visual_check: capturas de varias categorías, con foco en cualquier miniatura que tarde en cargar o falle
+
+- id: SC-DISCOVER-BURST-01
+  status: >
+    CONFIRMADO -- corrida CORRIDA-EXTENDIDA-device63-20260915 contra
+    192.168.1.63 (device distinto al habitual .186). Ráfaga de 15
+    keypresses alternando Right/Down (120ms entre cada uno, sin pausar)
+    dentro de Discover -- terminó limpio en la última categoría real
+    ("Short Dramas"), foco visible sobre un ítem real, sin overlap de
+    elementos, sin doble foco, sin crash (captura 61). Mismo criterio ya
+    confirmado en SC-HOME-BURST-01 contra .186, ahora también sostenido en
+    Discover contra .63.
+  title: Navegación en ráfaga dentro de Discover no rompe el layout
+  area: [core-ui]
+  severity: minor
+  screen: DiscoverPage
+  steps:
+    - Enviar una ráfaga rápida de keypresses de dirección (Right/Down mezclados) dentro de Discover, sin pausar
+    - Esperar 2s y revisar el estado
+  expected:
+    - Sin overlap de elementos, sin doble foco, sin crash -- mismo criterio que SC-HOME-BURST-01
+  logs_watch:
+    - Sin excepciones BrightScript no manejadas durante la ráfaga
+  visual_check: captura inmediatamente después de la ráfaga y 2s después
+
+- id: SC-EPG-01
+  status: >
+    CONFIRMADO -- corrida formal 2026-09-15, RECONFIRMADO. `EPGPage : Init`,
+    `screen_name:"EPG"` por log. Captura 23-epg.jpg: columnas Hoy/Ahora/
+    Próximamente con programación real, hero sincronizado con "A Quien
+    Corresponda" (foco). Esta vez TODOS los logos de canal cargaron
+    correctamente desde la primera captura (sin los bloques grises
+    momentáneos documentados en la exploración anterior) -- consistente
+    con que era lag de carga variable, no un problema persistente.
+    ---
+    DONE (2026-09-15, exploración) -- PASÓ. "En vivo" en el nav lateral =
+    EPGPage (`screen_name:"EPG"`, confirmado por log). Layout con columnas
+    "Hoy"/"Ahora"/"Próximamente", hero de fondo con el programa
+    actualmente enfocado (mismo patrón reactivo-a-foco que el hero de
+    Home). Detalle MENOR observado y luego descartado como bug: en una
+    primera captura, algunos íconos de canal (Dramas de Familia, Historias
+    de Vida) se veían como bloque gris sin logo -- una segunda entrada a
+    la misma pantalla más tarde en la sesión mostró esos mismos logos ya
+    cargados correctamente. Es lag de carga de imagen, no un ícono
+    faltante de verdad -- mismo patrón que el hero de Home tras ráfaga.
+  title: EPG carga franjas Hoy/Ahora/Próximamente con logos de canal
+  area: [core-network, core-ui]
+  severity: major
+  screen: EPGPage
+  steps:
+    - Desde el nav lateral, seleccionar "En vivo"
+    - Confirmar columnas Hoy/Ahora/Próximamente con programación real
+    - Revisar que los logos de canal carguen (puede haber lag breve, no debería quedar en blanco permanente)
+  expected:
+    - Programación visible y alineada, sin canales en blanco de forma persistente
+    - El hero de fondo sincroniza con el programa enfocado
+  logs_watch:
+    - 'EPGPage : Init, screen_name:"EPG"'
+
+- id: SC-EPG-DETAIL-01
+  status: >
+    CONFIRMADO -- corrida CORRIDA-EXTENDIDA-device63-20260915 contra
+    192.168.1.63 (device distinto al habitual .186). Hora real del device
+    confirmada vía timestamp UTC del telnet log + timezone del device
+    (`America/Bogota`, UTC-5): 19:34 UTC = 14:34 hora local del device. La
+    franja "Ahora" mostró "Noticias en Tiempo Real con Uriel Estrada y
+    Romina Ramos" con horario "14:00 - 15:00 (1 Hr)" -- coincide
+    correctamente (14:34 cae dentro de esa ventana), confirmado por
+    captura 28. Alineación de texto revisada en 2 pantallas (arriba y tras
+    scroll de 5 canales, captura 29) -- sin cortes ni superposición en
+    ninguna fila/columna. Todos los logos de canal cargaron correctamente
+    en ambas capturas, sin bloques grises. "No hay transmisión disponible"
+    en la columna Próximamente para varios canales es dato real (sin
+    programación cargada ahí), no un error.
+  title: "Auditoría visual detallada de EPG: horas correctas, alineación de texto, imágenes de canal"
+  area: [core-network, core-ui]
+  severity: major
+  screen: EPGPage
+  steps:
+    - Consultar la hora real del device (ECP `/query/device-info`, campo relacionado a timezone/hora) ANTES de entrar a EPG
+    - Entrar a EPG, capturar
+    - Comparar la franja "Ahora" mostrada contra la hora real del device -- debe corresponder al programa que efectivamente está al aire en ese momento
+    - Revisar alineación: que los textos de horario, nombre de programa y canal no se corten, no se superpongan entre filas/columnas
+    - Recorrer varios canales (scroll vertical) y varias franjas horarias (Hoy/Ahora/Próximamente) confirmando que las imágenes de cada canal cargan (esperar unos segundos si hace falta, no asumir roto de inmediato)
+  expected:
+    - La franja "Ahora" coincide con la hora real del device, no desfasada
+    - Ningún texto cortado ni superpuesto en ninguna fila/columna revisada
+    - Todas las imágenes de canal terminan cargando (el gris momentáneo ya documentado es aceptable, no debe quedar así permanentemente)
+  logs_watch:
+    - Sin errores de API de EPG al scrollear
+  visual_check: capturas de al menos 3 franjas/canales distintos tras carga completa, con foco en alineación e imágenes
+
+- id: SC-SEARCH-01
+  status: >
+    CONFIRMADO -- corrida formal 2026-09-15, RECONFIRMADO los 4 sub-casos
+    con verificación log+captura en cada uno. A (vacío): "¿Qué estás
+    buscando?" (24). B ("docufia"): 7/7 caracteres confirmados por log
+    (`Lit_d,o,c,u,f,i,a`), resultados relevantes (25). C
+    ("zzzznoexiste123", 15 chars): 15/15 caracteres confirmados,
+    "No se han encontrado resultados", sin desborde visual (26). D
+    (`!@#%&*()`, 8 símbolos): 8/8 caracteres confirmados por log, sin
+    excepción BrightScript (27). `screen_name:"Search"` confirmado al
+    entrar.
+    ---
+    DONE (2026-09-15, exploración) -- PASÓ los 4 sub-casos probados con
+    scripts/roku-type.js. Sub-caso A (campo vacío): mensaje de ayuda "¿Qué
+    estás buscando?" (no error), correcto. Sub-caso B (término con
+    resultados, "docufia"): resultados relevantes, grid limpio, log
+    confirma carácter por carácter tipeado. Sub-caso C (sin resultados,
+    "zzzznoexiste123", 15 chars): mensaje "No se han encontrado
+    resultados", sin crash, el texto largo no se sale del cuadro visible.
+    Sub-caso D (caracteres especiales "!@#%&*()"): aceptados sin crash,
+    log confirma cada carácter recibido (`Lit_!`, `Lit_@`, etc.), mismo
+    mensaje de "sin resultados" -- ninguna excepción BrightScript en
+    ningún sub-caso.
+  title: Búsqueda maneja vacío, con resultados, sin resultados, texto largo y caracteres especiales
+  area: [core-network, core-ui]
+  severity: minor
+  screen: SearchPage
+  steps:
+    - "Sub-caso A -- vacío: entrar a Buscar sin escribir nada, confirmar mensaje de ayuda (no error)"
+    - "Sub-caso B -- con resultados: escribir un término conocido (ej. docufia) con roku-type.js"
+    - "Sub-caso C -- sin resultados: escribir un término inventado largo (15+ chars)"
+    - "Sub-caso D -- caracteres especiales: escribir símbolos (!@#%&*())"
+  expected:
+    - Cada sub-caso maneja el estado correctamente, sin crash ni excepción BrightScript
+    - El texto tipeado nunca se sale visualmente del cuadro de búsqueda
+  logs_watch:
+    - 'SearchPage : Init, screen_name:"Search"'
+    - Sin excepción BrightScript en ningún sub-caso (confirmado)
+  visual_check: 1 captura por sub-caso (4 en total)
+
+- id: SC-FAV-01
+  status: >
+    CONFIRMADO -- corrida formal 2026-09-15, flujo funcional RECONFIRMADO
+    completo: marcado "Lotería del Crimen" desde ShowPage, apareció en
+    FavoritePage junto con 3 favoritos previos de la cuenta (captura 32),
+    entrado de nuevo y desmarcado, desapareció correctamente de
+    FavoritePage (captura 35, quedan los 3 previos). La excepción
+    BrightScript conocida se reprodujo DE NUEVO 2/2 veces en esta corrida
+    (al marcar Y al desmarcar) -- total acumulado ahora 6/6 reproducciones
+    en 3 sesiones, 3 shows distintos, ambos sentidos del toggle. Confianza
+    máxima, sin ninguna corrida donde NO se reprodujera -- confirmado listo
+    para reportar formalmente, ver detalle en PROJECT_MEMORY.md.
+    ---
+    DONE (2026-09-15, exploración) -- el flujo funcional PASA completo:
+    marcar desde ShowPage (2 shows nuevos, "Lotería del Crimen" y "Los
+    niños santos"), aparecen en FavoritePage junto con favoritos previos
+    ya existentes de la cuenta, y desmarcar desde ShowPage también
+    funciona (confirmado que "Los niños santos" desapareció de
+    FavoritePage tras desmarcarlo). PERO el hallazgo de la corrida
+    anterior SIGUE reproduciéndose -- ver detalle en logs_watch y en
+    PROJECT_MEMORY.md, ahora con 4 reproducciones acumuladas entre las 2
+    corridas (2 al marcar en la corrida anterior, 1 al marcar y 1 al
+    desmarcar en esta), en 3 shows distintos. Confianza ya alta de que es
+    un bug real y consistente (dispara en CUALQUIER toggle de favorito
+    desde ShowPage, no solo al marcar) -- listo para reportar como
+    hallazgo, ver recomendación de severidad en PROJECT_MEMORY.md.
+  title: Agregar/quitar favorito desde ShowPage (funcional OK, con excepción BrightScript de fondo ya confirmada 4 veces)
+  area: [core-network, core-ui]
+  severity: minor
+  screen: FavoritePage / ShowPage
+  steps:
+    - Marcar un show como favorito desde ShowPage (ícono de corazón)
+    - Verificar que aparece en FavoritePage
+    - Entrar de nuevo al show desde Favoritos y desmarcarlo
+    - Verificar que desaparece de FavoritePage
+  expected:
+    - Persistencia correcta del estado de favorito en ambas direcciones (marcar y desmarcar)
+  logs_watch:
+    - >
+      CONFIRMADO 4/4 -- reaparece SIEMPRE que se toca el ícono de favorito
+      desde ShowPage (marcar o desmarcar):
+      `BRIGHTSCRIPT: ERROR: roSGNode.AddReplace: "compnode": Type mismatch:
+      ottnext_ms_sdk_componentlib:/components/pages/ShowPage/ShowPage.brs(1087)`.
+      No bloquea la función (el favorito persiste bien en ambos sentidos),
+      pero es una excepción no manejada real -- reportar a Core.
+
+- id: SC-RADIOS-01
+  status: >
+    CONFIRMADO -- corrida formal 2026-09-15, RECONFIRMADO. Nav lateral
+    completo revisado por captura (21-navbar-open.jpg): Inicio, Secciones,
+    En vivo, Favoritos, Buscar, Mi cuenta -- sin "Radios". Consistente con
+    la exploración anterior, sin cambios.
+    ---
+    DONE (2026-09-15, exploración) -- CONFIRMADO: la ruta `/radios`
+    (`ViewRadiosPage`) SÍ existe en el release.json vivo de Azteca
+    (confirmado leyendo `routes.Radios` del config traído en esta sesión),
+    pero NO es alcanzable desde la navegación visible de esta build --
+    revisado el nav lateral completo (Inicio, Secciones, En vivo,
+    Favoritos, Buscar, Mi cuenta -- sin "Radios") y también TODAS las
+    categorías de Discover/Secciones hasta el final ("Short Dramas" es la
+    última, sin ninguna categoría de radio). No se probó deep link directo
+    a la ruta (fuera de alcance de ECP simple -- el deep linking de Roku
+    vía `/launch/dev?contentId=` es para contenido, no para rutas
+    internas de la app web-driven). Conclusión: Azteca no expone Radios en
+    la UI aunque el Core/config lo soporte -- consistente con que Azteca
+    es una app de TV/noticias, no de radio. No es un bug -- es una
+    confirmación de que el feature está apagado/no usado por este
+    cliente, documentado a pedido explícito de la consigna de esta sesión.
+  title: "Ruta /radios existe en config pero NO se expone en la navegación de Azteca"
+  area: [core-network, core-ui]
+  severity: minor
+  screen: N/A (ruta no alcanzable desde la UI)
+  steps:
+    - Revisar el nav lateral completo en busca de una opción "Radios"
+    - Revisar todas las categorías de Discover/Secciones hasta el final
+  expected:
+    - Si Azteca no ofrece radio, es correcto que no aparezca en ningún lado de la navegación (confirmado)
+  logs_watch:
+    - N/A -- no se disparó ninguna navegación a esa ruta
+  visual_check: captura del nav lateral completo + captura del final de Discover (última categoría real)

@@ -1,0 +1,79 @@
+{
+  "_meta": {
+    "note": "Catálogo de datos de prueba para los scripts de scripts/*.ps1 (ver RokuTest.psm1, catalog.ps1, test-deeplink.ps1). IDs tomados de evidencia REAL ya capturada en reports/azteca/analytics/ (GA4 video_id de sesiones reales contra el device .186/.63), no inventados. PENDIENTE: el 'contentId' de las entradas kind=episode y kind=live es el mismo id que se vio como video_id en GA4 (el id de MEDIA que llega al player) -- no está confirmado que sea idéntico al _id de episodio/live que espera getEpisode/getLive por GraphQL. Antes de la primera corrida real de test-deeplink.ps1/catalog.ps1, correr 'pwsh catalog.ps1 -Client azteca -Discover' para reconciliar contra la API viva y corregir cualquier id que no matchee (el propio catalog.ps1 fue escrito para esto).",
+    "ottAppIdSource": "confirmado por telnet real: [Base_Requests][getRequest][url] https://next.platform.mediastre.am/ott?appId=tvaztecaentretenimiento-14151535:tv (ver reports/_archive/2026-09-11T15-05-11-340Z/SC-SHOW-01/telnet.log y otros)"
+  },
+  "ottId": "tvaztecaentretenimiento-14151535",
+  "ottEnv": "production",
+  "verified": {
+    "date": "2026-09-17",
+    "how": "IDs cruzados desde reports/azteca/analytics/EVIDENCIA-PR173-plataforma-category.md y ad-hoc-2026-09-16/*.log (corridas reales contra el device). No se corrió catalog.ps1 -Discover todavía porque este paquete de scripts recién se integra hoy -- ver _meta.note."
+  },
+
+  "content": [
+    {
+      "key": "episode-loteria-t1e1",
+      "kind": "episode",
+      "contentId": "68ccea1cc4d2a00e7defa1ac",
+      "mediaId": "68ccea1cc4d2a00e7defa1ac",
+      "mediaType": "episode",
+      "title": "Lotería del Crimen | Temporada 1 | El Brujo: Capítulo 1",
+      "expect": "play",
+      "isLive": false,
+      "tags": ["deeplink", "smoke"]
+    },
+    {
+      "key": "episode-exatlon-mx-20mar",
+      "kind": "episode",
+      "contentId": "6862223e242be20e6a9846cd",
+      "mediaId": "6862223e242be20e6a9846cd",
+      "mediaType": "episode",
+      "title": "Exatlón México | Programa 20 de marzo 2025 | ¡Conoce a las dos Finalistas del Exatlón!",
+      "expect": "play",
+      "isLive": false,
+      "tags": ["deeplink"]
+    },
+    {
+      "key": "live-azteca-noticias",
+      "kind": "live",
+      "contentId": "683a80b644ba64f6068a51af",
+      "mediaType": "live",
+      "title": "adn Noticias (canal live)",
+      "expect": "play",
+      "isLive": true,
+      "tags": ["deeplink", "smoke"]
+    }
+  ],
+
+  "deeplinkNegative": [
+    {
+      "key": "deeplink-negativo-id-inexistente",
+      "contentId": "000000000000000000000000",
+      "mediaType": "episode",
+      "expect": "home-toast",
+      "toastPattern": "no.*disponible|no.*encontr|error",
+      "note": "Id con formato válido (24 hex, mongo ObjectId) pero que no existe: la app debe quedar en Home con un toast de error, no colgarse ni salir. Ajustar toastPattern con el texto real observado en la primera corrida."
+    }
+  ],
+
+  "navigation": {
+    "showRow": "Realities y concursos",
+    "menu": ["Secciones", "En vivo", "Favoritos", "Buscar"],
+    "scrollRows": 6
+  },
+
+  "budgets": {
+    "deeplinkColdToVideoMs": 12000,
+    "deeplinkWarmToVideoMs": 8000,
+    "deeplinkToShowPageMs": 6000,
+    "appLaunchCompleteMs": 5000,
+    "homeShownMs": 6000,
+    "homeSettledMs": 10000,
+    "openShowPageMs": 4000,
+    "textureUsedPctMax": 90,
+    "nodeGrowthPerCycleMax": 5,
+    "memGrowthPerCycleMaxMB": 2,
+    "menuPageMs": 4000,
+    "_comment": "Todos estos son valores INICIALES conservadores, no medidos empíricamente contra el device real todavía (ninguno de los 12 scripts se corrió aún post-integración, 2026-09-17). Ajustar con los números reales de la primera corrida de test-deeplink.ps1 y test-nav-perf.ps1 contra 192.168.1.186, y sacar este comentario cuando eso pase."
+  }
+}

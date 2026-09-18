@@ -1,0 +1,285 @@
+# Escenarios compartidos (Core) — Navegación: HOME
+#
+# ===========================================================================
+# CORRIDA 2026-09-18 17:25-17:33 UTC — device 192.168.1.54, build
+# v1.24.92609040, sesión logueada (IM 30f41b94-1310-46e1-8627-fb31590ffef3).
+# PRIMERA corrida de esta batería post-reorganización. Evidencia completa en
+# reports/azteca/2026-09-18_17-25-navegacion/{logs,screenshots,videos}/
+# (video de cámara real por caso). Resultados:
+#
+#   SC-HOME-01                     PASA. 11 rieles recorridos hasta
+#     "Recomendados para ti"; 3 Down extra en el límite inferior no rompen
+#     layout ni pierden foco; sin errores/timeouts en el log.
+#   SC-HOME-HERO-01                PASA. Reconfirmado que NO rota solo:
+#     30s sin input, capturas t0/t15/t30 idénticas. SÍ reactivo al foco
+#     (cambia a "MIGAJEROS" al moverse por el riel EN VIVO).
+#   SC-HOME-BURST-01               PASA. 25 Right + 25 Left en ráfaga; el
+#     foco desborda prolijamente al sidebar expandido; sin crash ni excepción.
+#   SC-HOME-VERMAS-01              PASA. "Ver más" aparece SOLO donde hay más
+#     contenido que el límite del riel: presente en "Regional News México"
+#     (limit 27), AUSENTE en "Programas" (entra completo) -- confirma la
+#     premisa del escenario. Select -> `Category : Init` (screen_name
+#     "Category") con el grid completo y título correcto.
+#   SC-HOME-CONFIG-CROSSCHECK-01   HALLAZGO (minor). release.json
+#     (config.app.version "1.0.86") define 13 componentes en
+#     routes.Home.components; en pantalla se renderizan 11. FALTAN
+#     "Novelas" (limit 10) y "Cine Mexicano" (limit 15): la secuencia real
+#     salta Series -> Podcast -> Regional News México, y Regional News ->
+#     DocuFIA. Las mismas 2 categorías tampoco aparecen en Discover, lo que
+#     apunta a que están VACÍAS en backend y la app las oculta bien (en vez
+#     de mostrar un riel roto) -- o sea el comportamiento de la app parece
+#     correcto y el problema sería de contenido/config. Confirmar con el
+#     equipo de contenido: llenarlas o sacarlas del release.json.
+#     Nota de copy (no bug): managerLabelI18n dice "Microdramas" y "Video
+#     Podcasts" pero en pantalla se ve "MicroDramas" y "Podcast", por
+#     useCustomLabel (usa el nombre real de la categoría).
+#
+# NOTA METODOLÓGICA: el endpoint plugin_inspect captura SOLO el plano
+# gráfico, no el de video. En el player las capturas salen negras aunque
+# query/media-player reporte state="play" error="false" y la posición
+# avance (solo se ven los subtítulos, que sí van en el plano gráfico). NO
+# confundir eso con una pantalla negra real -- para el player la evidencia
+# válida es el video de la cámara + query/media-player.
+# ===========================================================================
+#
+# Ver scenarios/shared/README.md para la convención de `area`/`severity`/`status`.
+#
+# AUTOMATIZACIÓN DISPONIBLE (2026-09-17): scripts/test-deeplink.ps1 mide,
+# contra el device real, que cada contenido del catálogo (test-data/azteca.json)
+# abra lo que promete (play / showPage / login / home-toast) en frío y en
+# caliente, con presupuestos de tiempo (budgets.deeplinkColdToVideoMs,
+# deeplinkWarmToVideoMs, deeplinkToShowPageMs) y detección de red degradada.
+# Complementa, no reemplaza, la exploración manual de este archivo: el YAML
+# documenta el paso a paso y los hallazgos de comportamiento para un
+# humano/agente, el script automatiza la medición repetible de tiempos y el
+# chequeo de que Back vuelve limpio al Home. Correr con:
+#   pwsh scripts/test-deeplink.ps1 -RokuHost 192.168.1.186 -Tag smoke
+#   pwsh scripts/test-deeplink.ps1 -RokuHost 192.168.1.186          # catálogo completo
+# Ver scripts/RokuTest.psm1 para el detalle de cómo mide tiempos (reloj del
+# device) y detecta red degradada. Pendiente: primera corrida real (el
+# catálogo se armó con IDs de evidencia ya capturada, no verificados todavía
+# contra la API viva -- ver test-data/azteca.json > _meta.note).
+#
+# Origen: exploración dedicada 2026-09-15 (noche), primera vez que se
+# explora Home a fondo ANTES de escribir escenarios (log+captura primero,
+# escenarios recién al final, mismo espíritu que login-registro). Reemplaza
+# al SC-HOME-01 genérico de la corrida anterior
+# (scenarios/shared/navegacion/_previo-2026-09-15-ya-corrido.yaml) con
+# escenarios más específicos, basados en lo realmente observado contra el
+# device (192.168.1.186), sesión logueada (jmatevargas@poligran.edu.co).
+# Evidencia completa: reports/azteca/navegacion/EXPLORACION-20260915-1900/
+# (telnet.log + ~20 capturas relevantes de Home).
+#
+# Fuente de config viva usada para cruzar categorías reales: release.json
+# de Azteca (https://next-apps.mdstrm.com/smart_tv/67f53bf7881515c36adba709/release.json),
+# consultado 2026-09-15 ~19:00 (hora local de esta sesión). app.version:
+# "1.0.86". Flags relevantes: hasAuth:true, hasSearch:true,
+# hasDiscoverContent:true, hasPlayerLives:false, hasSports:false. Build
+# real confirmado en el footer del nav bar del device: a:01.24.92609040 /
+# c:01.44.202609040 / osl5.3 / m86.
+#
+# Categorías de Home confirmadas 1:1 contra el `routes.Home.components` del
+# release.json (todas con contenido real, ninguna vacía/rota): Top 10,
+# Microdramas, Programas, Realities y concursos, Series, Video Podcasts
+# (aparece como "Podcast" en pantalla), Novelas, Regional News México,
+# Cine Mexicano, DocuFIA, Recomendados para ti. Arriba de todo: riel de
+# canales EN VIVO (no está en `routes.Home`, es el HeroView + su riel,
+# ver SC-HOME-HERO-01 abajo) y "Continuar viendo" (ViewLastWatched).
+
+- id: SC-HOME-01
+  status: >
+    CONFIRMADO -- corrida formal 2026-09-15 (CORRIDA-FORMAL-20260915-2200),
+    reconfirma la exploración previa sin divergencias. `HomePage : Init`
+    fresco tras cold start, `login_status:"connected"`. Recorrido completo
+    con Down por los 11 rieles reales hasta "Recomendados para ti"
+    (capturas 01-03), 3 Down adicionales en el límite inferior sin romper
+    layout ni perder foco. Sin excepciones/timeouts en el log durante el
+    recorrido (única línea de "error" fue el timeout normal del debugger
+    en boot, no relacionado). Evidencia:
+    reports/azteca/navegacion/CORRIDA-FORMAL-20260915-2200/ (01, 02, 03).
+    ---
+    DONE (2026-09-15, exploración) -- PASÓ. `HomePage : Init` confirmado,
+    `login_status:"connected"`. Se bajó por TODOS los rieles hasta el
+    final real ("Recomendados para ti", último de la lista del
+    release.json) sin timeouts, sin freezes, sin quedar atascado. Todas
+    las categorías del release.json aparecieron con nombre y contenido
+    correcto -- ninguna vacía ni con nombre distinto al configurado.
+    Capturas 06, 07, 08 (bottom, confirmado que no rompe al seguir
+    presionando Down en el límite).
+  title: Home carga todas las categorías configuradas, sin romperse al llegar al final
+  area: [core-network, core-ui]
+  severity: blocker
+  screen: HomePage
+  steps:
+    - Entrar a HomePage tras login
+    - Bajar con Down por todos los rieles hasta el último ("Recomendados para ti")
+    - Seguir presionando Down 2-3 veces más en el límite inferior
+  expected:
+    - Todos los rieles configurados en el release.json (nav real) aparecen con contenido
+    - Ningún riel queda vacío o roto visualmente
+    - Al llegar al final, Down adicional no rompe el layout ni pierde el foco
+  logs_watch:
+    - HomePage : Init, sin timeouts repetidos de red
+  visual_check: capturas de rieles intermedios y del final real de la página
+
+- id: SC-HOME-HERO-01
+  status: >
+    CONFIRMADO -- corrida formal 2026-09-15, RECONFIRMADO sin divergencias:
+    2 capturas separadas por 20s sin input (04-hero-t0.jpg / 05-hero-t20.jpg)
+    pixel-idénticas, CERO líneas nuevas de log en esos 20s (confirmado
+    contando líneas del telnet.log antes/después: 308/308). Al mover Right
+    2 veces, el hero cambió instantáneamente a "Dramas de Familia"
+    sincronizado con el tile (captura 06). Confirma 100% el hallazgo de la
+    exploración: hero reactivo a foco, no slideshow con timer.
+    ---
+    DONE (2026-09-15, exploración) -- PASÓ, con hallazgo de comportamiento
+    real documentado (no es un bug, es aclaración de cómo funciona): el
+    hero de arriba de Home NO es un slideshow/carrusel automático -- es
+    100% sincrónico con el foco del riel de canales EN VIVO justo debajo.
+    Confirmado con 2 capturas separadas por 20s SIN tocar el control
+    (01-home-hero-t0.jpg / 02-home-hero-hero-t20.jpg): pixel-idénticas, CERO
+    rotación automática, y CERO líneas nuevas en el log durante esa espera.
+    Al mover el foco manualmente con Right, el hero cambia
+    instantáneamente (imagen, título, descripción, horario) sincronizado
+    con el tile enfocado (captura 03). Esto contradice la sospecha inicial
+    de "slideshow" -- no aplica ese concepto acá, es un hero reactivo al
+    foco, no un carrusel con temporizador propio.
+  title: Hero de Home es reactivo al foco (NO rota sola) -- confirmado con evidencia
+  area: [core-ui]
+  severity: minor
+  screen: HomePage (HeroView)
+  steps:
+    - Entrar a HomePage, quedarse quieto sin presionar nada 20s, comparar 2 capturas
+    - Mover el foco con Right/Left sobre el riel de EN VIVO y observar el hero
+  expected:
+    - Si es reactivo a foco (como se confirmó), el hero solo cambia cuando el usuario navega, nunca solo
+    - Si tuviera autoplay, debería cambiar sin input del usuario -- NO fue el caso
+  logs_watch:
+    - Sin eventos nuevos de HeroView durante la espera sin input (confirmado: ninguno)
+  visual_check: >
+    2 capturas separadas por ~20s sin input (deben ser idénticas) + 1
+    captura tras mover el foco (debe cambiar sincronizado)
+
+- id: SC-HOME-BURST-01
+  status: >
+    CONFIRMADO -- corrida formal 2026-09-15, RECONFIRMADO. Ráfaga de 8
+    Right sobre el riel EN VIVO: foco único final en "Rumbo a la meta",
+    sin romper layout (captura 07-burst-immediate.jpg). Variante sana
+    respecto a la exploración anterior: esta vez el hero YA estaba cargado
+    en la captura inmediata (sin el gap negro momentáneo documentado antes)
+    -- normal, es lag de red variable, no un requisito fijo. Recaptura 2s
+    después (08-burst-plus2s.jpg) igual de correcta. Sin excepciones nuevas
+    en el log.
+    ---
+    DONE (2026-09-15, exploración) -- PASÓ. Ráfaga de 8 "Right" seguidos
+    sobre el riel EN VIVO: el foco terminó en un único tile correcto (sin
+    duplicar ni perder el foco), sin romper el layout. Detalle MENOR
+    observado (no bloqueante): justo tras la ráfaga, el hero de fondo
+    quedó momentáneamente en negro/sin imagen (captura 04) -- una
+    recaptura 2s después mostró la imagen ya cargada normalmente (captura
+    05), sin ningún error en el log en el medio. Es lag de carga de imagen
+    bajo navegación rápida, no un fallback roto ni una imagen faltante.
+  title: Navegación en ráfaga sobre el riel EN VIVO no rompe el foco ni el layout
+  area: [core-ui]
+  severity: minor
+  screen: HomePage
+  steps:
+    - Sobre el riel de canales EN VIVO, presionar Right 8 veces seguidas rápido
+    - Capturar inmediatamente y de nuevo 2s después
+  expected:
+    - Un solo tile con foco al final, sin layout roto
+    - La imagen de fondo del hero puede tardar en cargar tras ráfaga (aceptable), pero debe terminar cargando
+  logs_watch:
+    - Sin excepciones ni warnings de textura fallida (solo los warnings normales de "texture larger than UI resolution", ya conocidos y no bloqueantes)
+  visual_check: captura inmediata post-ráfaga + recaptura 2s después
+
+- id: SC-HOME-VERMAS-01
+  status: >
+    CONFIRMADO -- corrida formal 2026-09-15, RECONFIRMADO con ambos casos
+    verificados de nuevo end-to-end. Caso positivo: "Regional News México"
+    (limit:27) -- navegado con Right hasta el item 26 (Zacatecas) + tile
+    "Ver más — Regional News México" confirmado visualmente (captura 12),
+    Select confirmado por log (`screen_name:"Category"`,
+    `showScreencategoryGridPage`) y por captura del grid multi-fila (13,
+    todos los estados de México). Caso negativo: "DocuFIA" (limit:15) --
+    navegado con Right hasta el item 15 real ("DocuFIA: Una historia
+    particular"), SIN ningún tile adicional después (captura 18) -- el
+    riel termina exactamente en el total configurado. Patrón sano
+    confirmado de nuevo, sin excepciones.
+    ---
+    DONE (2026-09-15, exploración, a pedido explícito del usuario durante
+    la corrida) -- PASÓ. Confirmado el patrón completo: "Ver más" SOLO
+    aparece al final de un riel cuando la categoría tiene MÁS contenido
+    real del que el riel llega a mostrar navegando hasta el final con
+    Right. Casos confirmados:
+    - "Regional News México" (config `limit:27`): SÍ tiene "Ver más" al
+      final del riel (captura 20). Seleccionarlo navega a
+      CategoryGridPage (`screen_name:"Category"`,
+      `showScreencategoryGridPage`, capturas 21-22) con grid multi-fila
+      mostrando TODOS los estados regionales, confirmado más contenido
+      visible que en el riel original de Home.
+    - "DocuFIA" (config `limit:15`): NO tiene "Ver más" -- navegando con
+      Right hasta el final del riel se llega al último item real (15to,
+      "DocuFIA: Una historia particular") sin ningún tile adicional
+      después (captura 24). El riel ya muestra el total real disponible,
+      por eso no hace falta "ver más".
+    - "Series" (1 solo item real) y "Podcast" (9 items): tampoco tienen
+      "Ver más" -- mismo patrón, el riel ya cabe el total.
+    CONCLUSIÓN DEL PATRÓN: "Ver más" no es inconsistente ni un bug --
+    aparece exactamente cuando el riel de Home no alcanza a mostrar todo
+    el contenido real de esa categoría, y no aparece cuando sí lo hace.
+    No se encontró ningún caso de un riel con claramente más contenido del
+    mostrado que NO ofreciera "Ver más" (que sí sería un hallazgo real).
+  title: "Tile \"Ver más\" al final de un riel -- solo en categorías con más contenido del que el riel muestra"
+  area: [core-ui, core-network]
+  severity: minor
+  screen: HomePage -> CategoryGridPage
+  steps:
+    - Sobre un riel con más contenido configurado que el visible (ej. Regional News México), navegar con Right hasta el final
+    - Confirmar que aparece el tile "Ver más <Nombre categoría>"
+    - Seleccionarlo y confirmar por log y captura que lleva a una pantalla con TODO el contenido de esa categoría
+    - Repetir en un riel con pocos items (ej. DocuFIA, Series) y confirmar que NO aparece "Ver más" porque no hace falta
+  expected:
+    - Ver más aparece únicamente cuando hay contenido real no mostrado en el riel
+    - Al seleccionarlo, navega a CategoryGridPage con más contenido que el riel original (nunca pega en el mismo lugar ni rompe nada)
+    - Un riel que ya muestra todo su contenido no necesita ni muestra "Ver más"
+  logs_watch:
+    - 'Al seleccionar "Ver más": `screen_name:"Category"`, `ViewStack : showScreencategoryGridPage`'
+  visual_check: >
+    captura del tile "Ver más" al final del riel, captura de la
+    CategoryGridPage cargada mostrando más contenido que el riel
+
+- id: SC-HOME-CONFIG-CROSSCHECK-01
+  status: >
+    CONFIRMADO -- corrida formal 2026-09-15, RECONFIRMADO trayendo el
+    release.json vivo de nuevo en esta sesión y extrayendo
+    `routes.Home.components[0].components` programáticamente: 11 filas
+    reales (Top 10, Microdramas, Programas, Realities y concursos, Series,
+    Video Podcasts, Novelas, Regional News México limit:27, Cine Mexicano,
+    DocuFIA limit:15, Recomendados para ti), mismo orden y nombres 1:1 con
+    lo visto en pantalla. Confirma también numéricamente los limits usados
+    en SC-HOME-VERMAS-01 (27 vs 15). Sin divergencias.
+    ---
+    DONE (2026-09-15, exploración) -- PASÓ. Las categorías reales vistas en
+    pantalla (Top 10, Microdramas -- vista como "MicroDramas" en Discover,
+    Programas, Realities y concursos, Series, Video Podcasts -- vista como
+    "Podcast", Novelas, Regional News México, Cine Mexicano, DocuFIA,
+    Recomendados para ti) coinciden 1:1 con `routes.Home.components` del
+    release.json vivo consultado en esta sesión, mismo orden, mismos
+    nombres (salvo 2 diferencias menores de copy en pantalla vs.
+    `managerLabelI18n` del config -- "Video Podcasts" se muestra como
+    "Podcast" y "Microdramas" como "MicroDramas" -- no son errores, son
+    decisiones de copy/custom label ya contempladas por el flag
+    `useCustomLabel` del config, no un desvío real).
+  title: Categorías de Home coinciden con el release.json vivo (nav real de Azteca)
+  area: [core-network, core-ui]
+  severity: major
+  screen: HomePage
+  steps:
+    - Traer el release.json vivo de Azteca (ottId 67f53bf7881515c36adba709) antes de explorar
+    - Comparar cada `ViewSingleCategory` de `routes.Home.components` contra lo visto en pantalla
+  expected:
+    - Todas las categorías configuradas aparecen, con nombre y orden consistente (salvo custom labels documentados)
+  logs_watch:
+    - Sin categorías "not-set" o vacías en pantalla que sí estén en config
+  visual_check: capturas de cada tramo de rieles de Home usadas para el cruce

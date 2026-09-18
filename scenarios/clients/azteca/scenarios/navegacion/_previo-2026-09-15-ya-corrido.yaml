@@ -1,0 +1,108 @@
+# Escenarios compartidos (Core) — Navegación: Home, Discover, EPG, Search, Favoritos
+#
+# Ver scenarios/shared/README.md para la convención de `area`/`severity`/`status`.
+# Estado (2026-09-15): primera corrida real completada contra el device
+# (192.168.1.186), los 5 confirmados PASAN, con UN HALLAZGO nuevo real
+# (excepción BrightScript al marcar favorito desde ShowPage, ver
+# SC-FAV-01 abajo). Evidencia completa:
+# reports/azteca/navegacion/NAVEGACION-20260915-111232/ (25 capturas +
+# telnet.log). NOTA: el agente que corrió esto dejó la evidencia cruda
+# pero no llegó a documentar el resultado (se cortó por un cambio de
+# sesión) -- este resumen fue reconstruido leyendo el telnet.log
+# directamente, no es un reporte del agente.
+
+- id: SC-HOME-01
+  status: >
+    DONE (2026-09-15) -- PASÓ. `HomePage : Init` confirmado, navegación
+    fluida entre rieles, sin timeouts ni freezes observados. Capturas
+    01-02 (incluye navegación en ráfaga, sin romperse).
+  title: Home carga catálogo
+  area: [core-network, core-ui]
+  severity: blocker
+  screen: HomePage
+  steps:
+    - Entrar a HomePage tras login
+    - Navegar entre rieles/categorías con el control remoto
+  expected:
+    - Rieles cargan contenido, navegación fluida (sin freezes)
+  logs_watch:
+    - Sin timeouts repetidos en las Tasks de red
+  visual_check: screenshot de HomePage completa (baseline)
+
+- id: SC-DISCOVER-01
+  status: >
+    DONE (2026-09-15) -- PASÓ. `DiscoverPage : Init` confirmado
+    (`screen_name:"Discovery"`), scroll y navegación respondieron bien,
+    entrada a detalle de show desde ahí funcionó. Capturas 05-06.
+  title: Navegación Discover / Category Grid
+  area: [core-ui]
+  severity: minor
+  screen: DiscoverPage / CategoryGridPage
+  steps:
+    - Entrar a Discover
+    - Abrir una categoría (CategoryGridPage)
+  expected:
+    - Grid carga y responde a navegación
+  visual_check: screenshot de CategoryGridPage
+
+- id: SC-EPG-01
+  status: >
+    DONE (2026-09-15) -- PASÓ. `EPGPage : Init` confirmado
+    (`screen_name:"EPG"`), scroll y Back probados 2 veces (vuelve bien a
+    donde se esperaba, sin quedar en pantalla intermedia rota). Capturas
+    07-10.
+  title: Guía EPG carga canales y programación
+  area: [core-network, core-ui]
+  severity: major
+  screen: EPGPage
+  steps:
+    - Entrar a EPG
+    - Navegar canales y franjas horarias
+  expected:
+    - Programación visible y alineada, sin canales en blanco
+  logs_watch:
+    - Sin errores de API de EPG
+
+- id: SC-SEARCH-01
+  status: >
+    DONE (2026-09-15) -- PASÓ. `SearchPage : Init` confirmado, se probó
+    con un título con resultados ("DocuFIA...") y un caso sin resultados
+    -- ambos manejados bien, sin crash. Capturas 12-13, 18-19.
+  title: Búsqueda de contenido
+  area: [core-network, core-ui]
+  severity: minor
+  screen: SearchPage
+  steps:
+    - Buscar un título conocido
+  expected:
+    - Resultados relevantes se muestran
+
+- id: SC-FAV-01
+  status: >
+    PARCIAL (2026-09-15) -- el flujo funcional PASA (marcar, aparece en
+    FavoritePage, quitar -- confirmado en capturas 14, 15, 17, 24), PERO
+    se encontró un HALLAZGO real de fondo: al marcar como favorito desde
+    ShowPage, el log muestra
+    `BRIGHTSCRIPT: ERROR: roSGNode.AddReplace: "compnode": Type mismatch:
+    ottnext_ms_sdk_componentlib:/components/pages/ShowPage/ShowPage.brs(1087)`
+    -- reproducido 2 VECES en la misma corrida (con 2 shows distintos:
+    "DocuFIA: Terror..." y "DocuFIA: Niños santos"), mismo patrón exacto
+    ambas veces. Visualmente NO rompe nada (captura 16 muestra la pantalla
+    normal, ícono de favorito visible) -- mismo perfil que
+    SC-PLAYER-BUG-01: excepción no manejada que no crashea la app, se
+    recupera sola. Severidad: minor/major a confirmar -- necesita una 3ra
+    corrida para descartar que sea intermitente antes de reportarlo con
+    confianza (mismo criterio de rigor que AC-UL-02/AC-SEC-04).
+  title: Agregar/quitar favorito
+  area: [core-network, core-ui]
+  severity: minor
+  screen: FavoritePage
+  steps:
+    - Marcar un contenido como favorito desde detalle
+    - Verificar que aparece en FavoritePage
+    - Quitarlo
+  expected:
+    - Persistencia correcta del estado de favorito
+  logs_watch:
+    - 'NUEVO (2026-09-15): vigilar "roSGNode.AddReplace: compnode: Type mismatch" en ShowPage.brs(1087) al marcar favorito -- ver hallazgo arriba'
+

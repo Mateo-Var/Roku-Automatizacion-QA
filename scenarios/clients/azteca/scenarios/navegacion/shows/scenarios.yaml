@@ -1,0 +1,354 @@
+# ===========================================================================
+# CORRIDA 2026-09-18 17:43-17:56 UTC — device 192.168.1.54, build
+# v1.24.92609040, sesión logueada. PRIMERA corrida post-reorganización.
+# Evidencia: reports/azteca/2026-09-18_17-25-navegacion/. Shows usados:
+# Venga La Alegría, Lotería del Crimen, Acércate a Rocío, Historias de Vida.
+#
+#   SC-SHOW-LAYOUT-01           PASA. Layout consistente en los 4 shows, sin
+#     overlap: logo (o título en texto como fallback cuando no hay logo, ej.
+#     "Historias de Vida."), línea de metadata, subtítulo, descripción,
+#     VER AHORA + corazón, pestañas, lista de sub-grupos y grid.
+#   SC-SHOW-SECTIONS-01         PASA. Las secciones SÍ varían según el tipo
+#     de contenido: Venga La Alegría y Lotería del Crimen tienen 3 pestañas
+#     (Episodios / Acerca de este contenido / Relacionados), mientras que
+#     "Historias de Vida." tiene solo 2 (sin Relacionados).
+#   SC-SHOW-SEASON-SWITCH-01    PASA. Select sobre otro sub-grupo carga el
+#     contenido correcto (Espectáculos -> clips cortos de 2-6 min, distintos
+#     de los programas completos de 1H+). Ver el hallazgo de UX abajo.
+#   SC-SHOW-COPY-01             HALLAZGO REFORMULADO (minor). El bug
+#     original ("1 TEMPORADAS", plural incorrecto) NO se reprodujo -- los 4
+#     shows revisados tenían 2+ grupos. Pero se encontró algo más de fondo:
+#     el contador NO cuenta temporadas, cuenta los SUB-GRUPOS de la pestaña
+#     Episodios, que muchas veces no son temporadas:
+#       - Lotería del Crimen dice "2 TEMPORADAS", pero sus grupos son
+#         "Temporada 1" (25 videos) y "Contenido Exclusivo" (23 videos)
+#         -> es 1 temporada + 1 sección extra, no 2 temporadas.
+#       - Venga La Alegría dice "10 TEMPORADAS", pero sus grupos son
+#         "Programas Completos", "Espectáculos", "Belleza Venga La Alegría",
+#         "La Academia VLA", "Recetas VLA"... -> son secciones temáticas de
+#         un matutino diario, que no tiene temporadas.
+#       - "Historias de Vida." dice "2 TEMPORADAS" con grupos "Temporada 2" /
+#         "Temporada 1" -> acá sí es correcto.
+#     O sea: el "1 TEMPORADAS" original es un caso particular de este
+#     problema más general (el label asume que todo sub-grupo es temporada).
+#     PENDIENTE: búsqueda dirigida de un show de un solo grupo para
+#     reproducir el plural incorrecto.
+#   SC-SHOW-FAV-TOGGLE-01       PASA funcional, con la excepción BrightScript
+#     de ShowPage.brs(1086) -- ver detalle en navegacion/pantallas (SC-FAV-01).
+#   SC-FAV-INSTANT-01           PASA. Marcar refleja al instante en
+#     FavoritePage (`FavoritePage : Init`, screen_name "Favorite"); entrar
+#     desde Favoritos lleva al show correcto (GA4 program:"Venga La Alegría");
+#     desmarcar lo quita al instante de la lista.
+#   SC-SHOW-DUPLICATE-SELECT-01 PASA. 6 Select rápidos -> un solo
+#     `screen_view` de Show en el log; un único Back devuelve limpio, sin
+#     instancias apiladas.
+#   SC-SHOW-AOD-01              NO CORRIDO en esta sesión.
+#
+#   HALLAZGO DE UX (minor, transversal a ShowPage): las pestañas y los
+#   sub-grupos cargan SOLO con Select, no con el foco. Al mover el foco a
+#   "Relacionados" el subrayado se mueve pero abajo sigue el texto de
+#   "Acerca de este contenido" hasta que se presiona Select -- la pantalla
+#   se contradice a sí misma en ese intervalo. Mismo comportamiento en la
+#   lista de sub-grupos (enfocar "Espectáculos" deja el grid de "Programas
+#   Completos"). No crashea y es consistente, pero induce a error.
+# ===========================================================================
+# Escenarios compartidos (Core) — Navegación: pantalla de DETALLE de un
+# show VOD (ShowPage) -- layout, imágenes, metadata, consistencia visual.
+# NO incluye reproducción/controles del player -- eso está en
+# scenarios/shared/player/.
+#
+# Ver scenarios/shared/README.md para la convención de `area`/`severity`/`status`.
+#
+# Origen: exploración dedicada 2026-09-15 (noche). 3 shows distintos
+# explorados en profundidad: "Lotería del Crimen" (serie, 2 temporadas,
+# 25+23 videos), "Lo Que La Gente Cuenta: el podcast" (1 temporada,
+# episodio numerado), "Los niños santos" (DocuFIA, documental de 1 sólo
+# video). Evidencia completa:
+# reports/azteca/navegacion/EXPLORACION-20260915-1900/.
+
+- id: SC-SHOW-LAYOUT-01
+  status: >
+    CONFIRMADO -- corrida formal 2026-09-15, RECONFIRMADO con 2 shows
+    ("Lotería del Crimen", serie 2 temporadas, captura 29; "Lo Que La
+    Gente Cuenta: el podcast", 1 temporada, captura 36). Mismo layout
+    estructural en ambos: logo/título, metadata, sinopsis, VER AHORA +
+    corazón, pestañas Episodios/Acerca de este contenido/Relacionados. Sin
+    overlap ni texto cortado en ninguno. `screen_name:"Show"` confirmado
+    por log en ambas entradas, con `program` correcto en cada caso.
+    ---
+    DONE (2026-09-15, exploración) -- PASÓ. Layout consistente entre los 3
+    shows: logo/título del show, metadata (tipo, géneros, año, cantidad de
+    temporadas), sinopsis corta, botón "VER AHORA" + ícono de favorito
+    (corazón), y abajo 3 pestañas: "Episodios", "Acerca de este
+    contenido", "Relacionados". Sin overlap de texto ni imágenes cortadas
+    en ninguno de los 3. Imagen de fondo (hero del show) y thumbnails de
+    "Acerca de este contenido"/"Relacionados" tardan ~3-4s en cargar tras
+    entrar (se ven como bloques grises placeholder mientras tanto,
+    confirmado con captura antes/después) -- no es un fallback roto, es
+    lag de carga real, se resuelve solo sin intervención.
+  title: Layout de ShowPage consistente entre shows distintos, sin overlap
+  area: [core-ui]
+  severity: major
+  screen: ShowPage
+  steps:
+    - Entrar a 2-3 shows distintos desde Home/Discover
+    - Comparar layout (posición de título, metadata, botones, pestañas)
+    - Esperar la carga completa de imágenes/thumbnails (~4s) antes de evaluar
+  expected:
+    - Mismo layout estructural entre shows de distinto tipo (serie, podcast, documental)
+    - Sin texto cortado, sin overlap de elementos
+    - Imágenes/thumbnails terminan cargando (el placeholder gris inicial es aceptable, no debe quedar así permanentemente)
+  logs_watch:
+    - 'ShowPage, screen_name:"Show", sin excepciones de layout'
+  visual_check: captura de cada show tras carga completa (3 capturas)
+
+- id: SC-SHOW-SECTIONS-01
+  status: >
+    CONFIRMADO -- corrida formal 2026-09-15, RECONFIRMADO en los 2 shows
+    revisitados: "Lotería del Crimen" con sub-grupos "Temporada 1" (25
+    videos) y "Contenido Exclusivo" (23 videos) dentro de Episodios;
+    "Lo Que La Gente Cuenta" con un único sub-grupo "Episodios" (15
+    videos). Ambos con Acerca de este contenido y Relacionados presentes.
+    Sigue sin verse pestaña "Temporadas" separada ni "Próximos" en ningún
+    caso -- mismo estado que la exploración, sigue abierto (no confirmado
+    como ausencia real, solo no observado en el catálogo cubierto).
+    ---
+    DONE (2026-09-15, exploración, a pedido explícito del usuario durante
+    la corrida) -- confirmado qué secciones aparecen según tipo de
+    contenido, ninguna ausencia encontrada que sea un hallazgo real:
+    - "Lotería del Crimen" (serie, 2 temporadas): Episodios (con
+      sub-grupos "Temporada 1" 25 videos y "Contenido Exclusivo" 23
+      videos -- el selector de temporada está IMPLÍCITO como sub-listas
+      dentro de "Episodios", no como una pestaña "Temporadas" separada),
+      Acerca de este contenido, Relacionados. Sin pestaña "Próximos"
+      visible.
+    - "Lo Que La Gente Cuenta: el podcast" (1 temporada, episodio
+      numerado "Episodio 16"): mismo patrón, "1 TEMPORADAS" en la
+      metadata (ver hallazgo de copy en SC-SHOW-COPY-01).
+    - "Los niños santos" (documental, 1 solo video): Episodios (con un
+      único sub-grupo "Documental" / 1 video), Acerca de este contenido,
+      Relacionados. Tampoco "Próximos" -- consistente con ser una pieza
+      única sin continuación.
+    CONCLUSIÓN: no se encontró ningún caso de una sección ausente que
+    debería estar dado el tipo de contenido -- "Temporadas" como pestaña
+    separada y "Próximos" simplemente no se observaron en NINGUNO de los 3
+    shows probados (podría ser que Azteca no los usa en este catálogo, o
+    que aparecen solo con series de emisión activa/con episodios
+    programados a futuro, que no se probó). No marcar como bug -- falta
+    encontrar un show que debería tenerlos para confirmar si faltan de
+    verdad.
+  title: "Secciones de ShowPage (Episodios/Temporadas/Acerca de/Próximos/Relacionados) según tipo de contenido"
+  area: [core-ui]
+  severity: minor
+  screen: ShowPage
+  steps:
+    - Entrar a un show con múltiples temporadas y confirmar cómo se presenta el selector
+    - Entrar a un show de una sola pieza (documental) y confirmar qué secciones aparecen
+    - Entrar a un podcast episódico y confirmar qué secciones aparecen
+    - Documentar presencia/ausencia de cada sección posible: Episodios, Temporadas, Acerca de este contenido, Próximos, Relacionados
+  expected:
+    - Episodios, Acerca de este contenido y Relacionados presentes cuando el contenido tiene episodios/relacionados reales (confirmado en los 3)
+    - Temporadas y Próximos solo cuando aplican al tipo de contenido -- no se confirmó ningún caso en esta corrida, pendiente de un show que sí las amerite
+  logs_watch:
+    - Sin excepciones al cambiar entre pestañas
+  visual_check: captura de la zona de pestañas de cada uno de los 3 shows
+
+- id: SC-SHOW-SEASON-SWITCH-01
+  title: Cambiar de temporada/sub-grupo dentro de Episodios carga el contenido correcto
+  area: [core-network, core-ui]
+  severity: major
+  screen: ShowPage (pestaña Episodios)
+  steps:
+    - 'Entrar a un show con más de una temporada/sub-grupo real (ej. "Lotería del Crimen" -- "Temporada 1" 25 videos + "Contenido Exclusivo" 23 videos)'
+    - Confirmar la lista de episodios del primer sub-grupo (anotar 2-3 títulos/duraciones visibles)
+    - Cambiar al segundo sub-grupo (Select sobre "Contenido Exclusivo" o la temporada siguiente)
+    - Confirmar que la lista de episodios CAMBIA de verdad (títulos/miniaturas distintos a los del primer sub-grupo, no la misma lista repetida)
+    - Volver al primer sub-grupo y confirmar que muestra el mismo contenido original (no quedó "pegado" en el segundo)
+    - Repetir el mismo chequeo con un segundo show que tenga temporadas reales (no solo sub-grupos de episodios), si se encuentra alguno en el catálogo
+  expected:
+    - El contenido de episodios se actualiza correctamente al cambiar de sub-grupo/temporada, sin quedar mostrando la lista anterior
+    - Ir y volver entre sub-grupos no pierde ni mezcla contenido entre ellos
+    - Sin crash, sin lista vacía tras el cambio
+  logs_watch:
+    - Vigilar la llamada de red que trae los episodios del sub-grupo -- debería dispararse de nuevo al cambiar (no servir de una caché vieja incorrecta), sin error
+  visual_check: captura de la lista de episodios ANTES y DESPUÉS de cambiar de sub-grupo/temporada, en el mismo show
+
+- id: SC-SHOW-COPY-01
+  status: >
+    CONFIRMADO -- corrida formal 2026-09-15, RECONFIRMADO SOSTENIDO: "Lo
+    Que La Gente Cuenta: el podcast" (1 temporada real) sigue mostrando
+    "1 TEMPORADAS" (captura 36-show-podcast.jpg). Sin corrección desde la
+    exploración anterior -- sigue siendo cosmético/no bloqueante, listo
+    para reportar junto con el hallazgo de favoritos.
+    ---
+    DONE (2026-09-15, exploración) -- hallazgo MENOR de copy/i18n: en
+    shows de UNA sola temporada, la metadata muestra "1 TEMPORADAS"
+    (plural incorrecto para cantidad singular) en vez de "1 TEMPORADA".
+    Visto en "Lo Que La Gente Cuenta: el podcast" y "Los niños santos"
+    (captura 25 y 34). Es un detalle de pluralización no manejado en el
+    texto (probablemente concatena el número + "TEMPORADAS" fijo sin
+    lógica de singular/plural), cosmético, no bloqueante.
+  title: "Copy: \"1 TEMPORADAS\" (plural incorrecto) en shows de una sola temporada"
+  area: [core-ui]
+  severity: minor
+  screen: ShowPage
+  steps:
+    - Entrar a un show con exactamente 1 temporada
+    - Observar el texto de cantidad de temporadas en la metadata
+  expected:
+    - Debería decir "1 TEMPORADA" (singular), no "1 TEMPORADAS"
+  logs_watch: []
+  visual_check: captura de la línea de metadata (capturas 25, 34 de la exploración)
+
+- id: SC-SHOW-FAV-TOGGLE-01
+  status: >
+    CONFIRMADO -- corrida formal 2026-09-15, ver detalle completo en
+    SC-FAV-01 (scenarios/shared/navegacion/pantallas/scenarios.yaml).
+    Total acumulado ahora 6/6 reproducciones de la excepción BrightScript,
+    0 fallos funcionales del toggle en sí. Listo para reportar.
+    ---
+    DONE (2026-09-15, exploración) -- ver detalle completo en SC-FAV-01
+    (scenarios/shared/navegacion/pantallas/scenarios.yaml), documentado
+    ahí por ser el mismo hallazgo cross-pantalla (ShowPage + FavoritePage).
+    Resumen: marcar/desmarcar favorito desde ShowPage funciona
+    funcionalmente en los 3 shows probados, pero dispara SIEMPRE la
+    excepción BrightScript ya conocida
+    (`ShowPage.brs(1087)`, `roSGNode.AddReplace: "compnode": Type
+    mismatch`) -- ya con 4 reproducciones acumuladas (2 sesiones), en
+    ambos sentidos (marcar y desmarcar), en 3 shows distintos. Confianza
+    alta, lista para reportar.
+  title: Toggle de favorito desde ShowPage -- ver SC-FAV-01 para el detalle completo
+  area: [core-network, core-ui]
+  severity: minor
+  screen: ShowPage
+  steps:
+    - Ver SC-FAV-01 en scenarios/shared/navegacion/pantallas/scenarios.yaml
+  expected:
+    - Ver SC-FAV-01
+  logs_watch:
+    - Ver SC-FAV-01
+
+- id: SC-FAV-INSTANT-01
+  status: >
+    CONFIRMADO -- corrida CORRIDA-EXTENDIDA-device63-20260915 contra
+    192.168.1.63 (device DISTINTO al habitual .186, Streaming Stick 4K).
+    Confirmado con "Lotería del Crimen": marcar desde ShowPage (Discover)
+    -> aparece INSTANTÁNEO en FavoritePage sin refrescar (capturas 47-48)
+    -> entrar desde Favoritos lleva a la ShowPage correcta (mismo título,
+    capturas 48-49) -> desmarcar -> desaparece instantáneo (confirmado en
+    corrida de stress test, ver SC-FAV-TOGGLE-STRESS-01 en
+    scenarios/shared/navegacion/estres/scenarios.yaml). El toggle SIGUE
+    disparando la excepción BrightScript ya conocida en cada acción (ver
+    detalle de línea de código abajo). Solo se cubrió 1 show completo (no
+    3) por prioridad de tiempo en esta corrida -- el patrón ya es
+    consistente con lo documentado en 6/6 corridas previas contra .186, no
+    se considera necesario repetir con 3 shows más para confirmar el
+    comportamiento base.
+    ---
+    🆕 HALLAZGO NUEVO en este device (.63), no visto antes en .186: el
+    show "Exatlón Décima Temporada" (entrado desde Discover Y desde
+    Search) NO permite marcar como favorito -- en su lugar, el intento
+    dispara `BRIGHTSCRIPT: ERROR: ParseJSON: Unknown identifier
+    'Forbidden': mediastreamrokuplayersdk:/source/apis/MediaStreamPlayerAPI.brs(68)`
+    y la navegación rebota (Player -> Search/Discovery -> Show) SIN marcar
+    el favorito. Reproducido 2/2 veces con el mismo show, mismo video_id
+    (`6aa055ae4b2e1983cbf8ae7d`). Confirmado que NO quedó en Favoritos tras
+    el intento (captura 45). Distinto del bug conocido de
+    `ShowPage.brs(1087)` -- este es un error de API/contenido (HTTP
+    Forbidden mal manejado por el Player SDK), no del toggle de favorito
+    en sí. Hipótesis: el contenido tiene una restricción de acceso
+    (geo/DRM/entitlement) que el SDK no maneja con gracia -- necesita
+    confirmarse si es específico de este show o de cualquier contenido
+    restringido. Severidad sugerida: major (rompe una función completa
+    para el usuario, sin mensaje de error visible, solo rebote silencioso).
+  title: Marcar/desmarcar favorito refleja al instante, con 3 shows distintos, y acceder desde Favoritos lleva al show correcto
+  area: [core-network, core-ui]
+  severity: major
+  screen: ShowPage / FavoritePage
+  steps:
+    - "Con el show 1 (de una categoría): entrar a ShowPage, marcar favorito, ir INMEDIATAMENTE a FavoritePage (sin esperar/refrescar) y confirmar que ya aparece"
+    - Desde FavoritePage, seleccionar ese show y confirmar que navega a la ShowPage CORRECTA (mismo título que se marcó, no otro show, no pantalla en blanco)
+    - Volver, desmarcar el favorito (desde ShowPage o FavoritePage), confirmar que desaparece de FavoritePage al instante
+    - Repetir el mismo flujo completo con el show 2 (categoría distinta al 1)
+    - Repetir el mismo flujo completo con el show 3 (categoría distinta a 1 y 2)
+  expected:
+    - El cambio (agregar/quitar) se refleja en FavoritePage sin necesidad de refrescar/relanzar la app, en los 3 casos
+    - Acceder a un show desde FavoritePage siempre lleva a la ShowPage correcta correspondiente a ESE show, nunca a otro ni a una pantalla rota
+    - Comportamiento consistente entre los 3 shows probados, sin importar su tipo (serie/podcast/documental)
+  logs_watch:
+    - 'screen_name:"Favorite" tras marcar debe reflejar el nuevo estado sin re-lanzar la app'
+    - 'Al entrar desde FavoritePage, confirmar por log/program que el show que carga es el correcto (mismo título/ID que el marcado)'
+    - 'Es esperable que dispare la excepción ya conocida ShowPage.brs(1087) en cada toggle -- no es el foco de este escenario, no repetir el análisis, solo anotar si aparece'
+  visual_check: captura de FavoritePage justo después de marcar cada uno de los 3 (confirma que aparece sin refrescar), y de la ShowPage correcta al entrar desde Favoritos
+
+- id: SC-SHOW-DUPLICATE-SELECT-01
+  status: >
+    CONFIRMADO -- corrida CORRIDA-EXTENDIDA-device63-20260915 contra
+    192.168.1.63 (device distinto al habitual .186). Ráfaga de 5 Select
+    rápidos (150ms entre cada uno) sobre "Lotería del Crimen" enfocado en
+    Discover: solo 1 `screen_name:"Show"` real se disparó (log limpio, sin
+    duplicados), la ráfaga extra de Selects fue absorbida por el foco ya
+    posicionado en "VER AHORA" dentro de la ShowPage y lanzó el Player
+    (comportamiento esperado del control, no una instancia duplicada de
+    ShowPage). Back x1 volvió del Player a la Show (1 paso), Back x2 volvió
+    de Show a Discovery (1 paso) -- sin necesitar múltiples Back para
+    "destrancar" nada, sin pantallas apiladas. Sin crash, sin freeze,
+    mando responsivo en todo momento. Captura 60 confirma Discovery en
+    estado limpio tras la secuencia completa.
+  title: Seleccionar un show varias veces rápido no crea instancias duplicadas de la pantalla
+  area: [core-ui]
+  severity: major
+  screen: ShowPage
+  steps:
+    - Desde un riel de Home o Discover, con un show enfocado, presionar Select varias veces seguidas y rápido (simular doble/triple toque accidental) antes de que la pantalla termine de cargar
+    - Observar el log para contar cuántas veces se dispara `ShowPage : Init` / `screen_name:"Show"` para esa única acción del usuario
+    - Presionar Back una vez y confirmar a dónde vuelve (debería ser directo al riel de origen, no quedar atrapado entre "copias" apiladas de ShowPage)
+  expected:
+    - No debería instanciarse la pantalla más de una vez por la selección múltiple rápida (o si el framework la re-crea, Back debe volver en UN solo paso al origen, no requerir varios Back para "destrancar" pantallas duplicadas)
+    - Sin crash, sin freeze, sin quedar con el mando sin responder
+  logs_watch:
+    - 'Contar ocurrencias de "ShowPage : Init" inmediatamente después de la ráfaga de Select -- más de 1 con el mismo contenido es la señal de una instancia duplicada'
+  visual_check: captura tras la ráfaga (confirmar una sola ShowPage visible, no un layout roto/superpuesto) y tras el primer Back
+
+- id: SC-SHOW-AOD-01
+  status: >
+    NO CONFIRMADO -- corrida formal 2026-09-15: no se buscó activamente
+    contenido AOD en esta corrida (fuera del alcance de los 2 shows
+    revisitados, que ya se sabía no lo tenían). Se mantiene el mismo
+    estado que la exploración -- sigue sin evidencia exhaustiva a favor ni
+    en contra, no se sube el nivel de certeza sin haber vuelto a buscar.
+    ---
+    NO CONFIRMADO (2026-09-15, exploración) -- no se encontró ningún show
+    con contenido de audio-only/AOD explícito en los 3 shows explorados ni
+    en las categorías recorridas de Home/Discover. Consistente con lo
+    esperado (Azteca es video, no tiene sección de audio/radio -- ver
+    también SC-RADIOS-01). PERO esto es una ausencia observada, no una
+    confirmación exhaustiva -- no se recorrió el catálogo completo. Se
+    deja como "asumido por config/comportamiento observado", NO como
+    "confirmado con evidencia negativa exhaustiva" -- no inventar más
+    certeza de la que hay.
+    ---
+    RE-VALIDADO CON EVIDENCIA POSITIVA (2026-09-18, device 192.168.1.54,
+    build v1.24.92609040) -- sube algo la certeza: se identificó el mejor
+    candidato posible a AOD y se comprobó que NO lo es. En Secciones ->
+    "Recomendados para ti" hay un ítem rotulado literalmente PODCAST: "Lo
+    Que La Gente Cuenta: El Podcast" (géneros mostrados: "FANTASÍA, HORROR,
+    PODCASTS"). Al reproducir un episodio (VER AHORA / "Episodio 16: El
+    último adiós"), query/media-player devuelve un stream con TRACK DE
+    VIDEO real: format audio="aac_adts" video="mpeg4_10b" (H.264),
+    container="hls", is_live=false, duration ~684s, bitrate ~1.4 Mbps. Es
+    decir, incluso el contenido etiquetado "podcast" es VIDEO, no audio-only.
+    Refuerza que Azteca no ofrece AOD/solo-audio en este build -- hasta la
+    categoría más parecida (podcasts) se sirve como video. Sigue sin ser un
+    recorrido 100% exhaustivo del catálogo, pero ahora hay evidencia
+    positiva (no solo ausencia) de que el candidato natural a AOD es video.
+    Evidencia: reports/azteca/2026-09-18_17-25-navegacion/{logs/SC-SHOW-AOD-01.log,videos/SC-SHOW-AOD-01.mp4,screenshots/SC-AOD-01-01-podcast.jpg}
+  title: "Azteca no parece tener AOD (audio-only) -- no confirmado exhaustivamente"
+  area: [core-network, core-ui]
+  severity: minor
+  screen: ShowPage
+  steps:
+    - Ver si algún show/categoría ofrece reproducción de solo-audio
+  expected:
+    - N/A -- exploratorio, sin expectativa fija
+  logs_watch: []

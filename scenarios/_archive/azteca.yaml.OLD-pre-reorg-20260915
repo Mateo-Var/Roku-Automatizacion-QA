@@ -1,0 +1,521 @@
+# Registro de escenarios — cliente Azteca
+#
+# Fuente: MainScreen.brs/xml (client/azteca) + Library/components/pages (Core).
+# `area` es lo que usa el Test Router (Fase 3) para decidir qué batería correr
+# según lo que reportó el Change Analyzer:
+#   player          -> cambió el Player embebido dentro del .pkg del Core
+#   core-network    -> lógica de red/tasks/managers del Core (roUrlTransfer, APIs)
+#   core-ui         -> páginas/componentes visuales del Core
+#   client-config   -> appConfig.json de Azteca (pkgLibUrl, ottId, ads, GA4)
+#   client-assets   -> images/, manifest (splash, íconos, título)
+#
+# `severity` marca si un fallo aquí bloquea la release (blocker) o es
+# degradación aceptable temporalmente (major/minor).
+#
+# `status` (cuando existe): resultado de la última corrida real contra el
+# device, para NO reprocesar lo ya validado. Antes de correr un escenario,
+# LEER su `status` si lo tiene:
+#   DONE                  -> ya se corrió y confirmó, no re-ejecutar salvo
+#                            sospecha concreta de regresión
+#   DONE-MANUAL-PENDING   -> la parte automatizable ya está lista, solo
+#                            falta una confirmación humana externa (email
+#                            real, etc.) -- no es un test a re-correr
+#   PARCIAL               -> el hallazgo actual es válido, pero se puede
+#                            ampliar con MÁS casos nuevos (no repetir los
+#                            ya cubiertos)
+#   SUPERSEDED por <ID>   -> este escenario ya cumplió su propósito
+#                            indirectamente o quedó reemplazado por otro
+#                            más específico -- ver el id que lo reemplaza
+#   MERGED                -> se corrió integrado dentro de otro escenario,
+#                            no como corrida aparte
+# Un escenario SIN `status` significa que todavía no se corrió nunca.
+# Excepción explícita a "no re-ejecutar": cuando el objetivo declarado del
+# escenario ES reproducir un bug ya confirmado (ver AC-UL-02, `SC-PLAYER-BUG-01`)
+# y se está buscando ADEMÁS una variante nueva (ej. una hipótesis técnica
+# distinta) -- eso no es reprocesar, es extender la evidencia a propósito.
+
+- id: SC-BOOT-01
+  title: Arranque de la app y carga del Core
+  area: [player, core-network, client-config]
+  severity: blocker
+  screen: MainScreen (Azteca)
+  steps:
+    - Lanzar el canal desde cero (cold start)
+    - Observar el ComponentLibrary (rokuMSSdkComponentLib) cargar el .pkg indicado en appConfig.pkgLibUrl
+    - Esperar loadStatus = "ready"
+  expected:
+    - MainLibScene se instancia y reemplaza el preloader sin quedar colgado
+    - No aparece el label de error ("App initilization failed...")
+  logs_watch:
+    - 'la línea "MainScreen : onLoadStatusChanged : loadStatus : ready" debe aparecer'
+    - 'ninguna línea "loadStatus : failed"'
+    - Sin excepciones de compilación / Component Library
+  visual_check: screenshot al terminar el preloader (comparar contra baseline "home o login")
+
+- id: SC-BOOT-02
+  title: Fallo controlado si el .pkg del Core no carga
+  area: [player, client-config]
+  severity: blocker
+  screen: MainScreen (Azteca)
+  steps:
+    - Forzar (en entorno de prueba) un pkgLibUrl inválido o el .pkg no accesible
+  expected:
+    - Se muestra el mensaje de error, no un crash ni pantalla en negro
+  logs_watch:
+    - 'la línea "loadStatus : failed" o el appSDKErrorStatus con errorMsg'
+
+- id: SC-CONN-01
+  title: Pérdida y recuperación de conexión a internet
+  area: [core-network]
+  severity: major
+  screen: MainScreen (Azteca) -> propagado a MainLibScene
+  steps:
+    - Con la app ya cargada, cortar la red del Roku
+    - Esperar el ciclo del connectionTimer (cada 5s)
+    - Restaurar la red
+  expected:
+    - internetConnection se propaga a MainLibScene (linkStatus/internetConnection)
+    - La UI refleja el estado (banner/mensaje esperado, sin romper navegación)
+  logs_watch:
+    - Sin excepciones no manejadas en onConnectionChange / onLinkStatusChanged
+
+- id: SC-HOME-01
+  title: Home carga catálogo
+  area: [core-network, core-ui]
+  severity: blocker
+  screen: HomePage
+  steps:
+    - Entrar a HomePage tras login
+    - Navegar entre rieles/categorías con el control remoto
+  expected:
+    - Rieles cargan contenido, navegación fluida (sin freezes)
+  logs_watch:
+    - Sin timeouts repetidos en las Tasks de red
+  visual_check: screenshot de HomePage completa (baseline)
+
+- id: SC-DISCOVER-01
+  title: Navegación Discover / Category Grid
+  area: [core-ui]
+  severity: minor
+  screen: DiscoverPage / CategoryGridPage
+  steps:
+    - Entrar a Discover
+    - Abrir una categoría (CategoryGridPage)
+  expected:
+    - Grid carga y responde a navegación
+  visual_check: screenshot de CategoryGridPage
+
+- id: SC-EPG-01
+  title: Guía EPG carga canales y programación
+  area: [core-network, core-ui]
+  severity: major
+  screen: EPGPage
+  steps:
+    - Entrar a EPG
+    - Navegar canales y franjas horarias
+  expected:
+    - Programación visible y alineada, sin canales en blanco
+  logs_watch:
+    - Sin errores de API de EPG
+
+- id: SC-SHOW-01
+  title: Detalle de show y reproducción
+  area: [player, core-network, core-ui]
+  severity: blocker
+  screen: ShowPage -> EpisodeDetailPage -> Player
+  steps:
+    - Lanzar el canal desde cero (cold start)
+    - Entrar al show enfocado en Home
+    - Bajar en la lista
+    - Bajar en la lista otra vez
+    - Moverse a la derecha
+    - Seleccionar episodio
+    - Pausar con Play
+    - Reanudar con Play
+  expected:
+    - Video arranca sin buffering excesivo
+    - Controles responden (play/pause/seek)
+  logs_watch:
+    - Sin errores del Player embebido (buffering infinito, DRM fail)
+    - roUrlTransfer del manifest/licencia resuelve OK
+  visual_check: screenshot del player en reproducción (validar que no haya pantalla negra/verde)
+
+- id: SC-SEARCH-01
+  title: Búsqueda de contenido
+  area: [core-network, core-ui]
+  severity: minor
+  screen: SearchPage
+  steps:
+    - Buscar un título conocido
+  expected:
+    - Resultados relevantes se muestran
+
+- id: SC-FAV-01
+  title: Agregar/quitar favorito
+  area: [core-network, core-ui]
+  severity: minor
+  screen: FavoritePage
+  steps:
+    - Marcar un contenido como favorito desde detalle
+    - Verificar que aparece en FavoritePage
+    - Quitarlo
+  expected:
+    - Persistencia correcta del estado de favorito
+
+- id: SC-PAYWALL-01
+  title: Contenido restringido por suscripción
+  area: [core-network, core-ui]
+  severity: major
+  screen: PaymentRequiredPage
+  steps:
+    - Intentar reproducir contenido premium sin suscripción activa
+  expected:
+    - Redirige/muestra PaymentRequiredPage, nunca reproduce el contenido
+  logs_watch:
+    - '"purchased" tratado como entero (1), nunca como boolean (regla del Core)'
+
+- id: SC-ADS-01
+  title: Publicidad (roku_ads_lib / googleima3) carga y no bloquea playback
+  area: [client-config]
+  severity: major
+  screen: Player (pre-roll / mid-roll)
+  steps:
+    - Reproducir contenido con anuncios configurados
+  expected:
+    - El anuncio carga y, si falla, degrada a contenido sin bloquear la reproducción
+  logs_watch:
+    - Sin excepciones de googleima3 / roku_ads_lib que detengan el player
+
+- id: SC-PLAYER-BUG-01
+  title: "[BUG confirmado, condición de carrera] ParseJSON crash al entrar al Player por selección manual de episodio"
+  area: [player, core-network]
+  severity: major
+  screen: Player, al entrar desde ShowsPage/SeasonListView
+  found_on: 2026-09-11 (observación manual + confirmado con prueba dirigida, next-episode-test.log)
+  root_cause_confirmed: >
+    ACTUALIZADO tras 2 sesiones de prueba (8 transiciones de episodio en
+    total): NO es 100% determinístico por el método de selección -- es una
+    condición de carrera. Datos acumulados: selección manual
+    (SeasonListView + OK) 2 de 3 veces con bug; "Up Next" (con OK explícito
+    o autoplay por timeout, sin tecla) 0 de 5 veces con bug. El patrón que
+    SÍ se sostiene: el bug NUNCA apareció en ninguna variante de "Up Next",
+    solo puede aparecer en selección manual (pero no siempre). Hipótesis
+    sin cambios: al entrar por Up Next, el Player ya trae el ID del
+    próximo episodio resuelto (campo "next" del JSON del episodio
+    anterior) de forma síncrona; al entrar por selección manual, hay una
+    carrera entre el registro de métricas de ads
+    (postRequest .../metrics.mdstrm.com/inbound/v1/event/register/) y la
+    asignación de esa variable de ID -- que a veces gana la carrera (sin
+    bug) y a veces no (bug). Necesita más muestras para estimar el % real
+    de reproducción en selección manual.
+  steps:
+    - Desde ShowsPage, entrar a una temporada (SeasonListView)
+    - Seleccionar CUALQUIER episodio con OK (no usar Up Next)
+  expected:
+    - "BaseRequests : getRequest url : https://mdstrm.com/episode/<ID>.json (con ID poblado)"
+  actually_observed:
+    - "postRequest .../metrics.mdstrm.com/inbound/v1/event/register/"
+    - "BaseRequests : getRequest url : https://mdstrm.com/episode/.json (ID vacío)"
+    - "HTTP 404 'Not found' (texto plano, no JSON)"
+    - "BRIGHTSCRIPT: ERROR: ParseJSON: Unknown identifier 'Not found': mediastreamrokuplayersdk:/source/apis/MediaStreamPlayerAPI.brs(67)"
+  logs_watch:
+    - Buscar exactamente el patrón "episode/.json" (ID vacío entre / y .json)
+    - Buscar "ParseJSON: Unknown identifier" en cualquier .brs del Player SDK
+  control_case:
+    - Transición por "Up Next" (autoplay), 3/3 veces sin este error -- usar
+      como caso de control al reportar el bug (aísla que el problema es del
+      path de selección manual, no del Player en general).
+  regression_note: >
+    A pesar del error, la reproducción continúa (no crashea la app) --
+    severidad "major" y no "blocker" por eso, pero es un error no manejado
+    que viola el patrón "errors are values, not exceptions" que exige
+    Library/source/apis en el Core.
+
+- id: AC-UL-01
+  status: "DONE (2026-09-14) -- PASÓ, no re-ejecutar salvo regresión sospechada. Evidencia: reports/player-observation/AC-UL-01-20260914-085210_PASO/"
+  title: Login y logout funcionan correctamente (app y Smart Hub)
+  area: [core-network, core-ui]
+  severity: blocker
+  screen: LoginRegPage / AccountPage
+  steps:
+    - Lanzar el canal desde cero (cold start), sin sesión iniciada
+    - Observar que aparece un popup/pantalla pidiendo iniciar sesión
+    - Iniciar sesión con credenciales válidas
+    - Verificar que se muestra el id de cuenta / apodo con estado "sesión iniciada"
+    - Ir a AccountPage y cerrar sesión
+    - Verificar que se muestra el estado "sesión cerrada"
+  expected:
+    - Al arrancar sin sesión, aparece el prompt de login (no deja navegar libre sin avisar)
+    - Tras login exitoso, se ve el identificador de cuenta/apodo en algún lugar de la UI
+    - Tras logout, vuelve a estado deslogueado visible
+  logs_watch:
+    - Llamada de auth resuelve isSuccess/ok=true al loguear
+    - Limpieza de roRegistry (prefijo ottName) al desloguear
+  visual_check: screenshot del popup de login, de la pantalla con sesión iniciada (nombre/apodo visible), y de la pantalla tras logout
+
+- id: AC-UL-02
+  status: >
+    DONE (2026-09-14) -- Caso A (email inexistente) y Caso C (formato
+    inválido) PASARON. Caso B (password incorrecta contra email válido) es
+    el BUG CRÍTICO -- ya reproducido 8 VECES en total entre esta y otras
+    corridas (AC-SEC-01, AC-SEC-05, AC-SEC-07). NO buscar más
+    reproducciones del Caso B -- está sobrado de evidencia, cualquier
+    nuevo intento de login con email válido + password incorrecta lo va a
+    disparar de nuevo como efecto secundario, eso es esperado y no hace
+    falta documentarlo de nuevo cada vez. Evidencia:
+    reports/player-observation/AC-UL-02-20260914-090500_AMBIGUO-reintentar/
+    (primera corrida, ambigua) y AC-UL-02-20260914-run2/ (confirmación
+    definitiva con MOSTRAR).
+  title: Manejo de credenciales inválidas / formato incorrecto
+  area: [core-network, core-ui]
+  severity: major
+  screen: LoginRegPage
+  steps:
+    - Ir a LoginRegPage (deslogueado)
+    - "Caso A -- email incorrecto: ingresar un email que NO existe como cuenta (ej. variante inventada), contraseña cualquiera, confirmar"
+    - "Caso B -- password incorrecta: ingresar el email VÁLIDO (jmatevargas@poligran.edu.co) con una contraseña deliberadamente incorrecta, confirmar"
+    - "Caso C -- formato inválido: email sin @, o campo vacío, confirmar"
+  expected:
+    - Solo cuentas autorizadas pueden loguear -- en NINGÚN caso (A, B o C) debe terminar logueado
+    - Mensaje de error visible y específico por cada caso
+    - No crash, permanece en LoginRegPage
+  logs_watch:
+    - Error de dominio manejado (isSuccess=false / error() controlado), no excepción cruda ni ParseJSON sin manejar
+    - 'CRÍTICO: NUNCA debe aparecer "login_success"/"login_status":"connected" en los casos A o B -- si aparece, es el bug a confirmar'
+  visual_check: >
+    screenshot de cada mensaje de error mostrado. OBLIGATORIO antes de
+    confirmar cada intento: activar el toggle "MOSTRAR" (mostrar
+    contraseña) visible en la pantalla de password y tomar captura del
+    texto en claro, para confirmar con certeza qué carácter por carácter
+    quedó realmente escrito por el teclado en pantalla -- esto es lo que
+    faltó la vez pasada y dejó un resultado ambiguo (ver PROJECT_MEMORY.md,
+    sesión 2026-09-14). No confirmar el intento sin haber verificado así el
+    valor real tipeado.
+
+- id: AC-UL-03
+  status: "DONE (2026-09-14) -- PASÓ, la sesión persiste tras cold relaunch. No re-ejecutar. Evidencia: reports/player-observation/AC-UL-03-20260914/"
+  title: Re-login tras reiniciar la app
+  area: [core-network, core-ui]
+  severity: major
+  screen: LoginRegPage
+  steps:
+    - Con sesión iniciada, forzar cierre/relanzamiento de la app (Home + launch/dev, cold start)
+    - Observar si la app recuerda la sesión o vuelve a pedir login
+    - Si vuelve a pedir login, iniciar sesión de nuevo con las mismas credenciales válidas
+  expected:
+    - Si la app no persiste sesión entre reinicios, el usuario puede volver a loguearse sin errores
+    - Si la app SÍ persiste sesión (roRegistry), arranca directo logueado -- documentar cuál es el comportamiento real de Azteca, no asumir
+  logs_watch:
+    - Lectura de roRegistry al arrancar (si existe) resuelve sin excepción
+
+- id: AC-UL-04
+  status: >
+    PARCIAL (2026-09-14) -- la premisa del escenario no aplicó: no se
+    encontró NINGÚN contenido que gatee login para reproducir (probado en
+    3 puntos: 2 VOD desde Home, 1 live hero). No re-ejecutar este mismo
+    escenario tal cual -- si se retoma, que sea como exploración NUEVA
+    (más puntos del catálogo, no repetir los 3 ya probados) para confirmar
+    si existe *algún* contenido premium con candado, no como
+    re-validación de lo ya encontrado. Ligado a SC-PAYWALL-01 (nunca
+    corrido). Evidencia: reports/player-observation/AC-UL-04-20260914/
+  title: Login diferido al reproducir contenido que lo requiere (deep-link-like redirect)
+  area: [core-network, core-ui, player]
+  severity: blocker
+  screen: HomePage -> LoginRegPage -> Player
+  steps:
+    - Abrir la app sin iniciar sesión (deslogueado)
+    - Intentar reproducir un contenido (VOD o live) desde Home
+    - Cuando la app lo solicite, iniciar sesión con credenciales válidas
+    - Observar a dónde navega la app inmediatamente después del login
+  expected:
+    - La app redirige automáticamente al media que se había intentado reproducir (no vuelve a Home a ciegas)
+    - El contenido se reproduce sin errores ni pasos manuales adicionales
+    - Al volver atrás (Back) desde el player y re-navegar, la pantalla de login NO vuelve a aparecer (sesión ya quedó iniciada)
+  logs_watch:
+    - player_loaded aparece después del login, sin reintentos manuales de navegación
+    - Sin re-disparo de la pantalla de login tras el login exitoso
+  visual_check: screenshot del intento de reproducir sin sesión, del login, y del player ya reproduciendo el contenido originalmente elegido
+
+- id: AC-REG-01
+  status: "DONE (2026-09-14) -- PASÓ los 3 casos (registro nuevo, email duplicado, password débil). No re-ejecutar. Evidencia: reports/player-observation/AC-REG-01-20260914/"
+  title: Registro de cuenta nueva (confirmado que SÍ existe -- "Regístrate"/"Registrarme con email")
+  area: [core-network, core-ui]
+  severity: major
+  screen: LoginRegPage (opción de registro)
+  steps:
+    - Ir a LoginRegPage
+    - Seleccionar "Regístrate" / "Registrarme con email"
+    - Completar el flujo con un email de prueba NUEVO (no uno ya registrado) y una contraseña de prueba, usando el teclado en pantalla
+    - Confirmar el registro
+    - "Caso de error: intentar registrar con el email YA existente (jmatevargas@poligran.edu.co) y confirmar que muestra error de cuenta duplicada, no crash"
+    - "Caso de error: intentar registrar con formato inválido (email sin @, contraseña muy corta si aplica) y confirmar mensaje de error"
+  expected:
+    - El flujo de registro completa o pide verificación adicional (ej. email de confirmación) de forma clara, sin crash
+    - Registro con email duplicado muestra error claro, no crea cuenta duplicada ni loguea con datos ajenos
+    - Formato inválido muestra error específico, no crash
+  logs_watch:
+    - Sin excepciones no manejadas durante el flujo de registro
+    - Error de dominio manejado (isSuccess=false) en los casos de error, no excepción cruda
+  visual_check: >
+    Igual que AC-UL-02: usar el toggle "MOSTRAR" si existe en el campo de
+    contraseña para confirmar con certeza qué quedó tipeado antes de
+    confirmar cada intento.
+
+- id: AC-SEC-LOGIN-EDGE-01
+  status: >
+    DONE (2026-09-14) -- Escenario consolidado, reemplaza a los antiguos
+    AC-UL-KEYBOARD-01 (merged), AC-SEC-01 (superseded), AC-SEC-01B,
+    AC-SEC-02, AC-SEC-05, AC-SEC-06 y AC-SEC-07 -- eran 5-7 IDs separados
+    para variaciones del MISMO campo password/email en la MISMA pantalla,
+    que además siempre se corrían juntos en una sola sesión (ver
+    scenarios/login-registro-runbook.md Fase 2). Se fusionan acá sin
+    perder cobertura -- cada sub-caso abajo mapea 1:1 a un hallazgo ya
+    confirmado. TODOS los sub-casos A-E: DONE, no re-ejecutar salvo
+    sospecha de regresión puntual. Evidencia repartida entre
+    reports/player-observation/AC-SEC-01B-20260914-135206/,
+    AC-UL-02-20260914-run2/, LOGIN-REGISTRO-FULL-v2-20260914-1434/.
+  title: "Robustez del formulario de login: fuerza bruta, validación, inyección, input largo, normalización de email (consolidado)"
+  area: [core-network, core-ui]
+  severity: major
+  screen: LoginEmailView / LoginWithPasswordView
+  steps:
+    - "Sub-caso A (fuerza bruta, aislada del bug): con un email INEXISTENTE, 3 intentos consecutivos de login con password cualquiera -- editar solo el último caracter entre intento e intento (roku-type.js), verificar por log. DONE: rechaza los 3, pero SIN ninguna fricción (sin HTTP 429/delay/captcha) -- hallazgo confirmado: no hay rate limiting real."
+    - "Sub-caso B (password vacía/mínima, con email VÁLIDO): probar password vacía, luego 1 caracter. DONE: ambos rechazados correctamente, nunca loguea."
+    - "Sub-caso C (inyección, en AMBOS campos, con email VÁLIDO donde aplique): entrada tipo comillas simples/dobles mezcladas. DONE: sin crash, sin excepción BrightScript en ningún campo -- la app trata el string como texto plano. NOTA: si se prueba como password contra el email válido, va a disparar el bug crítico ya conocido (AC-UL-02 Caso B) -- eso es esperado, no reconfirmar con cuidado extra."
+    - "Sub-caso D (input largo 50+ chars, en AMBOS campos): DONE: trunca/hace scroll prolijo en los dos campos, sin crash ni freeze."
+    - "Sub-caso E (case sensitivity y espacios en email, con password correcta): mayúsculas + espacio final. DONE: mayúsculas rechazadas (case-sensitive, comportamiento válido no-bug), espacio final se trimea bien y loguea normal."
+  expected:
+    - Ningún sub-caso debe crashear la app ni generar excepción BrightScript no manejada
+    - Sub-caso A: idealmente debería haber fricción ante intentos repetidos (NO la hay -- hallazgo)
+    - Sub-casos B/C/D/E: comportamiento robusto confirmado, sin hallazgos nuevos más allá de lo ya documentado
+  logs_watch:
+    - Sin excepciones BrightScript no manejadas en ningún sub-caso
+    - Sub-caso A -- buscar "rate limit"/HTTP 429 (no apareció)
+    - Sub-caso B -- CRÍTICO si login_success con password vacía/1 char (no ocurrió)
+  visual_check: >
+    Presupuesto acotado -- 1 captura para el sub-caso A (resultado final),
+    1 para B, 1 con MOSTRAR si C se prueba como password, 1 para D
+    (campo largo), 1 para E. El resto se confirma por log
+    (onKeyEvent/screen_name/login_status), no por pantalla.
+
+- id: AC-SEC-03
+  status: >
+    DONE-MANUAL-PENDING (2026-09-14) -- la mitad automatizable PASÓ
+    (código inventado rechazado con OTP_CODE_INVALID). NO re-ejecutar esa
+    parte. Lo único pendiente es una acción HUMANA (no del agente):
+    confirmar si llegó un código OTP real al email y si ese código real
+    loguea bien -- eso no es un "test a re-correr", es una confirmación
+    que solo el usuario puede dar.
+  title: "Ingresar con código (OTP) -- ¿valida el código real?"
+  area: [core-network, core-ui]
+  severity: major
+  screen: LoginRegPage (opción "Ingresar con código")
+  steps:
+    - Seleccionar "Ingresar con código" con el email válido
+    - Confirmar que la app pide un código y (según el log/UI) que dice haberlo enviado
+    - Probar ingresar un código inventado (ej. "000000" o "111111") y confirmar
+  expected:
+    - Un código inventado NUNCA debe loguear -- debe mostrar error claro
+  logs_watch:
+    - 'CRÍTICO: si un código inventado resuelve login_success, es el mismo tipo de bug que AC-UL-02 pero en el flujo OTP'
+  manual_verification_required: >
+    PENDIENTE DE CONFIRMACIÓN HUMANA: el agente no tiene acceso a la bandeja
+    de email jmatevargas@poligran.edu.co. Dejar documentado en el reporte
+    que hace falta que el usuario confirme manualmente: (a) si efectivamente
+    llegó un correo con un código real, (b) si ese código real sí loguea
+    correctamente al probarlo. El agente solo puede confirmar la mitad
+    negativa (que un código inventado no debería pasar).
+
+- id: AC-SEC-04
+  status: >
+    DESEMPATADO 3-2 (2026-09-14, 5ta corrida,
+    LOGIN-REGISTRO-FINAL20MIN-20260914-1628) -- SÍ hay fuga de
+    información. La 5ta corrida independiente reconfirmó el mensaje CON
+    línea roja adicional ("No encontramos una cuenta asociada a este
+    email. Verifica que esté bien...") SOLO para el email inexistente,
+    mensaje limpio (sin línea roja) para el email válido
+    (jmatevargas@poligran.edu.co) -- mismo patrón exacto que las corridas
+    2 y 3 (tiebreak). Conteo final: 3 de 5 corridas ven la fuga (corridas
+    2, 3-tiebreak, 5-final20min) vs. 2 que no (corridas 1 y 4-rigor). Con
+    mayoría 3-2 se cierra como hallazgo real (minor), siguiendo el mismo
+    criterio de mayoría ya usado para el bug crítico AC-UL-02. No se
+    investigó la causa de las 2 corridas discrepantes (posible
+    intermitencia real del backend/A-B test) -- no amerita más corridas,
+    la mayoría ya es clara. Evidencia de las 5 corridas: reports/
+    player-observation/AC-SEC-04-20260914-115607/ (sin fuga),
+    LOGIN-REGISTRO-FULL-v2-20260914-1434/ (con fuga),
+    AC-SEC-04-tiebreak-20260914-151506/ (con fuga),
+    LOGIN-REGISTRO-RIGOR-20260914-154433/ (sin fuga),
+    LOGIN-REGISTRO-FINAL20MIN-20260914-1628/ (con fuga, capturas 10 y 20).
+    Sigue pendiente la confirmación HUMANA de si llegó el correo real de
+    reset y si el link funciona (fuera del alcance del agente). Reportar
+    como hallazgo minor junto con AC-UL-02/AC-SEC-01B al equipo de
+    backend.
+  title: "Olvidé mi contraseña -- ¿filtra si el email existe o no?"
+  area: [core-network, core-ui]
+  severity: minor
+  screen: LoginWithPasswordView (link "Olvidé mi contraseña")
+  steps:
+    - Con el email válido, seleccionar "Olvidé mi contraseña" y confirmar
+    - Observar el mensaje mostrado (captura)
+    - Repetir el mismo flujo con un email que NO existe como cuenta
+    - Comparar los dos mensajes mostrados
+  expected:
+    - Idealmente el mensaje es igual en ambos casos ("si el email existe, te enviamos instrucciones") -- si el mensaje distingue explícitamente "email no encontrado" vs "correo enviado", es una fuga de información menor (permite enumerar qué emails están registrados, mismo patrón de fondo que AC-UL-02)
+  manual_verification_required: >
+    PENDIENTE DE CONFIRMACIÓN HUMANA: el agente no puede confirmar si
+    realmente llegó el correo de reset a la bandeja real. Documentar en el
+    reporte que falta esa confirmación manual del usuario.
+
+- id: AC-SEC-05
+  status: >
+    DONE (2026-09-14) -- PASÓ en ambos campos (email y password),
+    confirmado en 2 corridas distintas. Sin crash, sin comportamiento de
+    inyección real. No re-ejecutar salvo con payloads de inyección
+    DISTINTOS a los ya probados (comillas simples/dobles mezcladas).
+  title: Inyección básica en campos de login
+  area: [core-network, core-ui]
+  severity: minor
+  screen: LoginEmailView / LoginWithPasswordView
+  steps:
+    - "Probar en el campo email: entrada tipo comillas simples/dobles y caracteres típicos de inyección (ej. algo con ' o \" mezclado con texto), confirmar"
+    - "OBLIGATORIO (pendiente de la corrida anterior, no se aisló): probar la MISMA entrada de inyección en el campo password, con el email válido -- llegar ahí siguiendo el flujo normal Email->Password (no navegar directo al campo password desde otro lado, ver nota de teclado en PROJECT_MEMORY.md sobre fragilidad de esa navegación)"
+  expected:
+    - Rechazo limpio (validación de formato o error de auth normal), sin crash, sin excepción cruda en el log, sin comportamiento raro (ej. loguear por accidente)
+  logs_watch:
+    - Sin excepciones BrightScript no manejadas
+    - Sin login_success con esas entradas
+
+- id: AC-SEC-06
+  status: "DONE (2026-09-14) -- PASÓ, documentado (mayúsculas rechazadas = case-sensitive, no bug; espacio final se trimea bien). No re-ejecutar."
+  title: Case sensitivity y espacios en el email
+  area: [core-network, core-ui]
+  severity: minor
+  screen: LoginEmailView
+  steps:
+    - Intentar login con el email válido pero en mayúsculas (ej. JMATEVARGAS@POLIGRAN.EDU.CO) + password correcta
+    - Intentar con un espacio al final del email + password correcta
+  expected:
+    - Documentar el comportamiento real (puede ser válido que loguee igual, email no distingue mayúsculas típicamente) -- lo que sí sería raro es que el espacio al final rompa el match silenciosamente sin mensaje de error claro
+
+- id: AC-SEC-07
+  status: "DONE (2026-09-14) -- PASÓ en ambos campos (email y password), scroll/truncado prolijo, sin crash. No re-ejecutar."
+  title: Input largo en campos de login
+  area: [core-ui]
+  severity: minor
+  screen: LoginEmailView / LoginWithPasswordView
+  steps:
+    - Escribir una cadena larga (50+ caracteres repetidos) en el campo de email
+    - "OBLIGATORIO (pendiente de la corrida anterior, no se aisló): con el email válido, llegar al campo password siguiendo el flujo normal Email->Password y escribir ahí una cadena larga (50+ caracteres) también"
+  expected:
+    - El campo trunca visualmente de forma prolija o hace scroll, sin crash ni freeze de la UI, en AMBOS campos
+
+- id: SC-DEEPLINK-01
+  title: Deep linking (launch con contentId)
+  area: [client-config, core-network]
+  severity: minor
+  screen: MainScreen -> handleDeeplinkingLaunchEvent
+  steps:
+    - Lanzar el canal con parámetros de deep link (contentId, mediaType)
+  expected:
+    - Navega directo al contenido indicado, sin pasar por Home primero
