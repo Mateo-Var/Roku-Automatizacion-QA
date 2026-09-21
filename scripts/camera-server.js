@@ -18,19 +18,64 @@
 // cámara trasera al TV, dejarla ahí. Recién ahí usar start/stop por caso
 // desde otra terminal.
 
+import 'dotenv/config'
 import http from 'node:http'
 import https from 'node:https'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import wsPkg from 'ws'
-const WebSocketServer = wsPkg.Server
+import crypto from 'node:crypto'
+import { WebSocketServer } from 'ws'
 import { spawn } from 'node:child_process'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = 8091
 const STATE_FILE = path.join(__dirname, '.camera-server.state.json')
+
+// Usuario/contraseña fijos para todo el que entre por el túnel público
+// (celular grabando y /view desde la PC) -- protege la URL expuesta por
+// Cloudflare Tunnel, que de otra forma quedaría abierta a cualquiera.
+const AUTH_USER = process.env.CAMERA_AUTH_USER
+const AUTH_PASS = process.env.CAMERA_AUTH_PASS
+if (!AUTH_USER || !AUTH_PASS) {
+  console.error('Falta CAMERA_AUTH_USER / CAMERA_AUTH_PASS en .env -- ver .env.example')
+  process.exit(1)
+}
+
+function timingSafeEqual(a, b) {
+  const bufA = Buffer.from(a)
+  const bufB = Buffer.from(b)
+  if (bufA.length !== bufB.length) return false
+  return crypto.timingSafeEqual(bufA, bufB)
+}
+
+function checkAuth(req) {
+  const header = req.headers['authorization'] || ''
+  if (!header.startsWith('Basic ')) return false
+  let decoded
+  try {
+    decoded = Buffer.from(header.slice(6), 'base64').toString('utf8')
+  } catch {
+    return false
+  }
+  const idx = decoded.indexOf(':')
+  if (idx === -1) return false
+  const user = decoded.slice(0, idx)
+  const pass = decoded.slice(idx + 1)
+  return timingSafeEqual(user, AUTH_USER) && timingSafeEqual(pass, AUTH_PASS)
+}
+
+function requireAuth(res) {
+  res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Camara QA"' })
+  res.end('Auth requerida')
+}
+
+// El WebSocket del navegador no permite mandar el header Authorization, así
+// que para /ws usamos un token derivado del usuario/contraseña, incrustado
+// en el HTML -- y ese HTML solo se sirve después de pasar el Basic Auth de
+// arriba, así que el token nunca llega a quien no se autenticó primero.
+const WS_TOKEN = crypto.createHash('sha256').update(`${AUTH_USER}:${AUTH_PASS}`).digest('hex')
 
 const PAGE_HTML = `<!doctype html>
 <html>
@@ -78,7 +123,7 @@ async function start() {
   const zoom = setupZoom(stream)
   const applyZoom = zoom.apply
 
-  const ws = new WebSocket('wss://' + location.host + '/?role=phone')
+  const ws = new WebSocket('wss://' + location.host + '/?role=phone&token=__WS_TOKEN__')
   ws.onclose = () => { setStatus('Desconectado -- recargá la página', 'rec'); setTimeout(() => location.reload(), 3000) }
 
   // Manda una foto chica cada ~300ms para que se pueda ver en vivo desde
@@ -209,7 +254,7 @@ const VIEW_HTML = `<!doctype html>
   const slider = document.getElementById('zoomSlider')
   const zoomVal = document.getElementById('zoomVal')
   const zoomNote = document.getElementById('zoomNote')
-  const ws = new WebSocket('wss://' + location.host + '/?role=viewer')
+  const ws = new WebSocket('wss://' + location.host + '/?role=viewer&token=__WS_TOKEN__')
   let lastFrame = Date.now()
   ws.onopen = () => status.textContent = 'conectado, esperando frames del celular...'
   ws.onclose = () => { status.textContent = 'desconectado -- recargando...'; setTimeout(() => location.reload(), 2000) }
@@ -260,14 +305,15 @@ async function runServer() {
     cert: fs.readFileSync(path.join(__dirname, '.certs', 'cert.pem')),
   }
   const server = https.createServer(tlsOptions, async (req, res) => {
+    if (!checkAuth(req)) { requireAuth(res); return }
     if (req.method === 'GET' && req.url === '/') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-      res.end(PAGE_HTML)
+      res.end(PAGE_HTML.replace('__WS_TOKEN__', WS_TOKEN))
       return
     }
     if (req.method === 'GET' && req.url === '/view') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-      res.end(VIEW_HTML)
+      res.end(VIEW_HTML.replace('__WS_TOKEN__', WS_TOKEN))
       return
     }
     if (req.method === 'POST' && req.url.startsWith('/upload/')) {
@@ -294,7 +340,13 @@ async function runServer() {
 
   const viewers = new Set()
   let lastZoomInfo = null
-  const wss = new WebSocketServer({ server })
+  const wss = new WebSocketServer({
+    server,
+    verifyClient: (info, cb) => {
+      const token = new URL(info.req.url, 'https://x').searchParams.get('token')
+      cb(!!token && timingSafeEqual(token, WS_TOKEN))
+    },
+  })
   wss.on('connection', (ws, req) => {
     const role = new URL(req.url, 'https://x').searchParams.get('role')
     if (role === 'viewer') {
